@@ -23,6 +23,8 @@ def _build_db_background():
     try:
         print("📦 قاعدة البيانات فارغة — جاري بناء الفهرس عبر Gemini API...")
         from backend.tools.setup_db import setup_database
+        # Start a watcher that marks DB as ready once first batch is stored
+        _start_readiness_watcher()
         setup_database()
         from backend.rag.vector_store import get_collection
         count = get_collection().count()
@@ -41,6 +43,28 @@ def _build_db_background():
         else:
             print("❌ فشل بناء قاعدة البيانات بالكامل")
         _db_building = False
+
+
+def _start_readiness_watcher():
+    """Background thread that marks DB as ready once first batch is stored."""
+    import time as _time
+
+    def _watch():
+        global _db_ready
+        while _db_building and not _db_ready:
+            try:
+                from backend.rag.vector_store import get_collection
+                count = get_collection().count()
+                if count > 0:
+                    _db_ready = True
+                    print(f"✅ قاعدة البيانات جاهزة مبدئياً — {count} مادة متاحة (البناء مستمر)")
+                    return
+            except Exception:
+                pass
+            _time.sleep(5)
+
+    watcher = threading.Thread(target=_watch, daemon=True)
+    watcher.start()
 
 
 @asynccontextmanager
