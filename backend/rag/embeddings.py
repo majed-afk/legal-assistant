@@ -31,8 +31,8 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     batch_size = 100
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
-        # Add retry logic for rate limits
-        for attempt in range(3):
+        # Retry with longer backoff for rate limits (up to 6 attempts)
+        for attempt in range(6):
             try:
                 result = client.models.embed_content(
                     model="gemini-embedding-001",
@@ -46,14 +46,17 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
                 break
             except Exception as e:
                 if "429" in str(e) or "RATE" in str(e).upper():
-                    wait_time = 2 ** attempt * 5
-                    print(f"  ⏳ Rate limit hit, waiting {wait_time}s...")
+                    wait_time = min(2 ** attempt * 5, 120)  # max 2 min wait
+                    print(f"  ⏳ Rate limit hit, waiting {wait_time}s... (attempt {attempt+1}/6)")
                     time.sleep(wait_time)
                 else:
                     raise
-        # Small delay between batches to avoid rate limits
+        else:
+            # All retries exhausted — raise so caller knows this batch failed
+            raise RuntimeError(f"Rate limit: failed to embed batch {i}-{i+len(batch)} after 6 attempts")
+        # Delay between batches to stay under rate limits
         if i + batch_size < len(texts):
-            time.sleep(0.5)
+            time.sleep(1)
     return all_embeddings
 
 

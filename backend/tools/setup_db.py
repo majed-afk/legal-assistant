@@ -62,22 +62,28 @@ def setup_database():
         for a in articles
     ]
 
-    # Generate embeddings
-    print(f"\nتوليد التضمينات (embeddings) لـ {len(texts)} مقطع...")
-    print("(قد يستغرق هذا بضع دقائق في المرة الأولى لتحميل النموذج)")
+    # Generate embeddings AND store incrementally (batch by batch)
+    # This way partial progress is saved even if rate limits stop us later
+    print(f"\nتوليد التضمينات وتخزينها تدريجياً لـ {len(texts)} مقطع...")
 
-    batch_size = 50
-    all_embeddings = []
+    batch_size = 25  # Smaller batches to stay within Gemini API rate limits
+    stored_count = 0
     for i in range(0, len(texts), batch_size):
         end = min(i + batch_size, len(texts))
-        batch = texts[i:end]
+        batch_texts = texts[i:end]
+        batch_ids = ids[i:end]
+        batch_metas = metadatas[i:end]
         print(f"  معالجة {i+1}-{end} من {len(texts)}...")
-        embeddings = embed_texts(batch)
-        all_embeddings.extend(embeddings)
-
-    # Store in ChromaDB
-    print(f"\nتخزين في ChromaDB...")
-    add_documents(ids, texts, all_embeddings, metadatas)
+        try:
+            embeddings = embed_texts(batch_texts)
+            # Store this batch immediately in ChromaDB
+            add_documents(batch_ids, batch_texts, embeddings, batch_metas)
+            stored_count += len(batch_texts)
+            print(f"  ✓ تم تخزين {stored_count}/{len(texts)} مقطع")
+        except Exception as e:
+            print(f"  ⚠️ فشل في معالجة المقاطع {i+1}-{end}: {e}")
+            # Continue with remaining batches — partial DB is better than nothing
+            continue
 
     final_count = get_collection_count()
     print(f"\n✓ تم تخزين {final_count} مقطع في قاعدة البيانات")
