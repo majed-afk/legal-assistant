@@ -4,29 +4,58 @@ FastAPI Backend — المساعد القانوني لنظام الأحوال ا
 from __future__ import annotations
 import json
 import os
+import threading
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+# Track whether vector DB is ready (for health check)
+_db_ready = False
+_db_building = False
+
+
+def _build_db_background():
+    """Build vector DB in background thread so server starts immediately."""
+    global _db_ready, _db_building
+    _db_building = True
+    try:
+        print("📦 قاعدة البيانات فارغة — جاري بناء الفهرس عبر Gemini API...")
+        from backend.tools.setup_db import setup_database
+        setup_database()
+        from backend.rag.vector_store import get_collection
+        count = get_collection().count()
+        print(f"✅ بناء الفهرس اكتمل — {count} مادة مفهرسة")
+        _db_ready = True
+    except Exception as e:
+        print(f"❌ خطأ في بناء الفهرس: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        _db_building = False
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ChromaDB at startup. Build vector DB if empty (first deploy)."""
+    """Initialize ChromaDB at startup. Build vector DB in background if empty."""
+    global _db_ready
     print("⏳ جاري تهيئة ChromaDB...")
     from backend.rag.vector_store import get_collection
     col = get_collection()
     count = col.count()
 
     if count == 0:
-        print("📦 قاعدة البيانات فارغة — جاري بناء الفهرس عبر Gemini API...")
-        from backend.tools.setup_db import setup_database
-        setup_database()
-        count = col.count()
+        # Build in background thread — don't block server startup
+        print("📦 قاعدة البيانات فارغة — سيتم بناء الفهرس في الخلفية...")
+        thread = threading.Thread(target=_build_db_background, daemon=True)
+        thread.start()
+    else:
+        _db_ready = True
+        print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
 
-    print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
     print("✅ Embeddings عبر Gemini API (بدون نموذج محلي — ذاكرة خفيفة)")
+    print("🚀 السيرفر جاهز لاستقبال الطلبات")
     yield
 
 
@@ -79,6 +108,8 @@ async def health_check():
         "status": "healthy",
         "service": "مساعد الأحوال الشخصية",
         "vector_db_count": get_collection_count(),
+        "db_ready": _db_ready,
+        "db_building": _db_building,
     }
 
 
@@ -90,6 +121,12 @@ async def ask_question(req: QuestionRequest):
 
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="السؤال مطلوب")
+
+    if not _db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
+        )
 
     rag_result = retrieve_context(req.question)
 
@@ -118,6 +155,12 @@ async def ask_question(req: QuestionRequest):
 @app.post("/api/search")
 async def search_articles(req: SearchRequest):
     """Search law articles."""
+    if not _db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
+        )
+
     from backend.rag.embeddings import embed_query_list
     from backend.rag.vector_store import search
 
