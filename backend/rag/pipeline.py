@@ -10,7 +10,7 @@ from backend.rag.classifier import classify_query
 
 # Cache for RAG results (question -> context). Stores last 128 unique questions.
 _rag_cache: dict[str, dict] = {}
-_RAG_CACHE_MAX = 128
+_RAG_CACHE_MAX = 32
 
 
 def retrieve_context(question: str, top_k: int = 10) -> dict:

@@ -13,16 +13,12 @@ from pydantic import BaseModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Preload models and data at startup for fast first response."""
-    print("⏳ جاري تحميل نموذج الـ Embedding...")
-    from backend.rag.embeddings import get_model
-    get_model()  # Preload embedding model (~4-5s at startup instead of first request)
-    print("✅ تم تحميل نموذج الـ Embedding")
-
+    """Initialize ChromaDB at startup. Embedding model loads lazily on first request."""
     print("⏳ جاري تهيئة ChromaDB...")
     from backend.rag.vector_store import get_collection
     col = get_collection()
     print(f"✅ ChromaDB جاهز — {col.count()} مادة مفهرسة")
+    print("ℹ️ نموذج الـ Embedding سيُحمّل عند أول طلب (لتوفير الذاكرة)")
     yield
 
 
