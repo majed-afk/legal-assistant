@@ -4,7 +4,6 @@ FastAPI Backend — المساعد القانوني لنظام الأحوال ا
 from __future__ import annotations
 import json
 import os
-import threading
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -13,77 +12,22 @@ from pydantic import BaseModel
 
 # Track whether vector DB is ready (for health check)
 _db_ready = False
-_db_building = False
-
-
-def _build_db_background():
-    """Build vector DB in background thread so server starts immediately."""
-    global _db_ready, _db_building
-    _db_building = True
-    try:
-        print("📦 قاعدة البيانات فارغة — جاري بناء الفهرس عبر Gemini API...")
-        from backend.tools.setup_db import setup_database
-        # Start a watcher that marks DB as ready once first batch is stored
-        _start_readiness_watcher()
-        setup_database()
-        from backend.rag.vector_store import get_collection
-        count = get_collection().count()
-        print(f"✅ بناء الفهرس اكتمل — {count} مادة مفهرسة")
-    except Exception as e:
-        print(f"⚠️ خطأ جزئي في بناء الفهرس: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # Mark as ready even if partially built — some articles are better than none
-        from backend.rag.vector_store import get_collection
-        count = get_collection().count()
-        if count > 0:
-            _db_ready = True
-            print(f"✅ قاعدة البيانات جاهزة — {count} مادة متاحة")
-        else:
-            print("❌ فشل بناء قاعدة البيانات بالكامل")
-        _db_building = False
-
-
-def _start_readiness_watcher():
-    """Background thread that marks DB as ready once first batch is stored."""
-    import time as _time
-
-    def _watch():
-        global _db_ready
-        while _db_building and not _db_ready:
-            try:
-                from backend.rag.vector_store import get_collection
-                count = get_collection().count()
-                if count > 0:
-                    _db_ready = True
-                    print(f"✅ قاعدة البيانات جاهزة مبدئياً — {count} مادة متاحة (البناء مستمر)")
-                    return
-            except Exception:
-                pass
-            _time.sleep(5)
-
-    watcher = threading.Thread(target=_watch, daemon=True)
-    watcher.start()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ChromaDB at startup. Build vector DB in background if empty."""
+    """Initialize ChromaDB at startup — pre-built index ships with Docker image."""
     global _db_ready
     print("⏳ جاري تهيئة ChromaDB...")
     from backend.rag.vector_store import get_collection
     col = get_collection()
     count = col.count()
 
-    if count == 0:
-        # Build in background thread — don't block server startup
-        print("📦 قاعدة البيانات فارغة — سيتم بناء الفهرس في الخلفية...")
-        thread = threading.Thread(target=_build_db_background, daemon=True)
-        thread.start()
-    else:
+    if count > 0:
         _db_ready = True
         print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
+    else:
+        print("❌ قاعدة البيانات فارغة — تأكد من وجود chroma_db/ في Docker image")
 
     print("✅ Embeddings عبر Gemini API (بدون نموذج محلي — ذاكرة خفيفة)")
     print("🚀 السيرفر جاهز لاستقبال الطلبات")
@@ -140,7 +84,6 @@ async def health_check():
         "service": "مساعد الأحوال الشخصية",
         "vector_db_count": get_collection_count(),
         "db_ready": _db_ready,
-        "db_building": _db_building,
     }
 
 

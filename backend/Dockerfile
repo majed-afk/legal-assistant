@@ -19,5 +19,5 @@ RUN rm -rf /root/.cache /tmp/*
 
 EXPOSE 8000
 
-# Vector DB will be built on first startup via Gemini API
+# Vector DB is pre-built and shipped with the image (765 articles, ~17MB)
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

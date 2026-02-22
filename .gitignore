@@ -15,8 +15,8 @@ out/
 .env
 .env.local
 
-# ChromaDB (will be rebuilt)
-backend/chroma_db/
+# ChromaDB — pre-built index shipped with Docker image (765 articles)
+# backend/chroma_db/
 
 # PDFs (too large for git)
 *.pdf
