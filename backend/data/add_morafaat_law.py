@@ -188,7 +188,7 @@ ORDINAL_MAP = {
     'الثامنة والتسعون': 98,
     'التاسعة والتسعون': 99,
     'املائة': 100, 'المائة': 100,
-    'احلادية بعد املائة': 101,
+    'احلادية بعد املائة': 101, 'األوىل بعد املائة': 101,
     'الثانية بعد املائة': 102,
     'الثالثة بعد املائة': 103,
     'الرابعة بعد املائة': 104,
@@ -376,9 +376,10 @@ def parse_articles_from_pdf():
     # Articles include their لائحة (regulation) text
 
     # Pattern to match article headers
-    # Matches: 'املادة [ordinal]:' or 'لاملادة [ordinal]:' with optional refs
+    # Matches: 'املادة [ordinal]' with any prefix (لا, ل, نا, وا, عا, etc.)
+    # and optional trailing references (page numbers, etc.)
     article_pattern = re.compile(
-        r'(?:لا)?(?:ل)?املادة\s+([^\n:]{3,60}?)[\s:]*(?:\d+/\s*\d+)?\n',
+        r'(?:[:\s]*)(?:[\u0600-\u06FF]*)املادة\s+([^\n]{3,80}?)\s*\n',
     )
 
     matches = list(article_pattern.finditer(text))
@@ -386,9 +387,10 @@ def parse_articles_from_pdf():
 
     for i, match in enumerate(matches):
         ordinal_text = match.group(1).strip()
-        # Clean up the ordinal
-        ordinal_text = re.sub(r'\s*\d+/\s*\d+', '', ordinal_text).strip()
-        ordinal_text = re.sub(r'\s*[:\s]+$', '', ordinal_text).strip()
+        # Clean up the ordinal: remove trailing references, numbers, colons
+        ordinal_text = re.sub(r'\s*\d+/\s*\d+', '', ordinal_text).strip()  # Remove X/Y refs
+        ordinal_text = re.sub(r'[\s:]+[\d/\sلنعو]+$', '', ordinal_text).strip()  # Remove trailing nums
+        ordinal_text = re.sub(r'\s*[:\s]+$', '', ordinal_text).strip()  # Remove trailing colons
 
         num = ORDINAL_MAP.get(ordinal_text)
         if num is None:
