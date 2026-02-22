@@ -19,29 +19,71 @@ async def lifespan(app: FastAPI):
     """Initialize ChromaDB at startup — index is pre-built during Docker build."""
     global _db_ready
     print("⏳ جاري تهيئة ChromaDB...")
-    from backend.rag.vector_store import get_collection
+    from backend.rag.vector_store import get_collection, get_collection_count
     col = get_collection()
     count = col.count()
 
     if count > 0:
         _db_ready = True
         print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
-    else:
-        # Fallback: build DB at runtime if Docker build step was skipped
-        print("⚠️ قاعدة البيانات فارغة — محاولة البناء في الخلفية...")
+
+    # Always check if DB needs completing (even if partially built)
+    from backend.config import ARTICLES_JSON_PATH
+    try:
+        with open(ARTICLES_JSON_PATH, "r", encoding="utf-8") as f:
+            total_articles = len(json.load(f)["articles"])
+    except Exception:
+        total_articles = 765  # fallback
+
+    if count < total_articles:
+        print(f"⚠️ قاعدة البيانات غير مكتملة ({count}/{total_articles}) — استكمال في الخلفية...")
         import threading
-        def _build():
+        import time
+
+        def _build_with_retry():
+            """Build DB with multiple retry rounds for rate limits."""
             global _db_ready
-            try:
-                from backend.tools.setup_db import setup_database
-                setup_database()
-                from backend.rag.vector_store import get_collection_count
-                if get_collection_count() > 0:
+            max_rounds = 10  # retry up to 10 rounds
+            for round_num in range(1, max_rounds + 1):
+                try:
+                    current = get_collection_count()
+                    if current >= total_articles:
+                        break
+                    print(f"🔄 محاولة البناء #{round_num} — {current}/{total_articles} مقطع...")
+                    from backend.tools.setup_db import setup_database
+                    setup_database()
+                    # Mark ready as soon as we have any articles
+                    if not _db_ready and get_collection_count() > 0:
+                        _db_ready = True
+                        print("✅ قاعدة البيانات جاهزة للاستخدام (بناء جزئي)")
+                except Exception as e:
+                    print(f"⚠️ خطأ في محاولة البناء #{round_num}: {e}")
+
+                current = get_collection_count()
+                if current >= total_articles:
                     _db_ready = True
-                    print("✅ تم بناء قاعدة البيانات بنجاح")
-            except Exception as e:
-                print(f"❌ فشل بناء قاعدة البيانات: {e}")
-        threading.Thread(target=_build, daemon=True).start()
+                    print(f"✅ اكتمل بناء قاعدة البيانات — {current}/{total_articles}")
+                    break
+
+                # Mark ready if we have any articles
+                if not _db_ready and current > 0:
+                    _db_ready = True
+                    print(f"✅ قاعدة البيانات جاهزة للاستخدام ({current}/{total_articles})")
+
+                # Wait before retrying to let rate limits reset
+                wait = min(60 * round_num, 300)  # 1min, 2min, ... up to 5min
+                print(f"⏳ انتظار {wait}s قبل المحاولة التالية...")
+                time.sleep(wait)
+
+            final = get_collection_count()
+            if final >= total_articles:
+                print(f"🎉 اكتمل بناء قاعدة البيانات — {final} مقطع")
+            else:
+                print(f"⚠️ بناء جزئي: {final}/{total_articles} مقطع")
+            if final > 0:
+                _db_ready = True
+
+        threading.Thread(target=_build_with_retry, daemon=True).start()
 
     print("🚀 السيرفر جاهز لاستقبال الطلبات")
     yield
@@ -92,11 +134,13 @@ class SearchRequest(BaseModel):
 async def health_check():
     """Health check endpoint."""
     from backend.rag.vector_store import get_collection_count
+    count = get_collection_count()
     return {
         "status": "healthy",
         "service": "مساعد الأحوال الشخصية",
-        "vector_db_count": get_collection_count(),
+        "vector_db_count": count,
         "db_ready": _db_ready,
+        "db_complete": count >= 765,
     }
 
 
