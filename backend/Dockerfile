@@ -14,19 +14,13 @@ COPY backend/ /app/backend/
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Build vector DB at image build time using Gemini Embedding API
-# Render auto-injects env vars as Docker build args
-ARG GOOGLE_API_KEY
-RUN if [ -n "$GOOGLE_API_KEY" ]; then \
-      GOOGLE_API_KEY=$GOOGLE_API_KEY python -m backend.tools.setup_db; \
-    else \
-      echo "⚠️  GOOGLE_API_KEY not set — skipping DB build"; \
-    fi
+# Skip DB build at Docker build time — Gemini free tier rate limits
+# make it unreliable. Runtime builds the DB incrementally with retries.
 
 # Clean up to reduce image size
 RUN rm -rf /root/.cache /tmp/*
 
 EXPOSE 8000
 
-# Vector DB is pre-built during image build (765 articles)
+# DB is built at runtime with resumable incremental builds
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
