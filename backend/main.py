@@ -13,12 +13,20 @@ from pydantic import BaseModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ChromaDB at startup. Embedding model loads lazily on first request."""
+    """Initialize ChromaDB at startup. Build vector DB if empty (first deploy)."""
     print("⏳ جاري تهيئة ChromaDB...")
     from backend.rag.vector_store import get_collection
     col = get_collection()
-    print(f"✅ ChromaDB جاهز — {col.count()} مادة مفهرسة")
-    print("ℹ️ نموذج الـ Embedding سيُحمّل عند أول طلب (لتوفير الذاكرة)")
+    count = col.count()
+
+    if count == 0:
+        print("📦 قاعدة البيانات فارغة — جاري بناء الفهرس عبر Gemini API...")
+        from backend.tools.setup_db import setup_database
+        setup_database()
+        count = col.count()
+
+    print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
+    print("✅ Embeddings عبر Gemini API (بدون نموذج محلي — ذاكرة خفيفة)")
     yield
 
 
