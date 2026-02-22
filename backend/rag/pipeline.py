@@ -13,7 +13,7 @@ _rag_cache: dict[str, dict] = {}
 _RAG_CACHE_MAX = 32
 
 
-def retrieve_context(question: str, top_k: int = 10) -> dict:
+def retrieve_context(question: str, top_k: int = 5) -> dict:
     """
     Retrieve relevant legal articles for a question.
     Returns classified query + relevant context string.
@@ -70,12 +70,9 @@ def retrieve_context(question: str, top_k: int = 10) -> dict:
 def build_context_string(results: dict, classification: dict) -> str:
     """Build a formatted context string from search results."""
     parts = []
-    parts.append("=" * 50)
-    parts.append("المواد النظامية المسترجعة — هذه كل المواد المتاحة لك، لا تذكر أي مادة خارجها")
-    parts.append("=" * 50)
 
     if not results["documents"] or not results["documents"][0]:
-        parts.append("\nلم يتم العثور على مواد ذات صلة مباشرة.")
+        parts.append("لم يتم العثور على مواد ذات صلة.")
         return "\n".join(parts)
 
     documents = results["documents"][0]
@@ -83,7 +80,6 @@ def build_context_string(results: dict, classification: dict) -> str:
     distances = results["distances"][0]
 
     for i, (doc, meta, dist) in enumerate(zip(documents, metadatas, distances)):
-        similarity = 1 - dist  # cosine distance to similarity
         chapter = meta.get("chapter", "")
         if "الإثبات" in chapter:
             law_name = "نظام الإثبات"
@@ -91,18 +87,11 @@ def build_context_string(results: dict, classification: dict) -> str:
             law_name = "نظام المرافعات الشرعية"
         else:
             law_name = "نظام الأحوال الشخصية"
-        parts.append(f"\n--- نتيجة {i+1} (تطابق: {similarity:.0%}) ---")
-        parts.append(f"📜 النظام: {law_name}")
-        parts.append(f"📂 {meta.get('chapter', '')} > {meta.get('section', '')}")
-        parts.append(f"📌 الموضوع: {meta.get('topic', '')}")
-        parts.append(f"\n{doc}")
-
+        parts.append(f"[{i+1}] {law_name} | {meta.get('section', '')}")
+        parts.append(doc)
         if meta.get("has_deadline") == "True":
-            parts.append(f"\n⏰ تنبيه مهلة: {meta.get('deadline_details', '')}")
-        parts.append("---")
-
-    if classification.get("needs_deadline_check"):
-        parts.append("\n⚠️ تنبيه: هذا السؤال قد يتضمن مهلاً نظامية مهمة. تأكد من ذكرها في الإجابة.")
+            parts.append(f"⏰ مهلة: {meta.get('deadline_details', '')}")
+        parts.append("")
 
     return "\n".join(parts)
 
