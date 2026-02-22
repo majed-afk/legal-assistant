@@ -27,12 +27,19 @@ def _build_db_background():
         from backend.rag.vector_store import get_collection
         count = get_collection().count()
         print(f"✅ بناء الفهرس اكتمل — {count} مادة مفهرسة")
-        _db_ready = True
     except Exception as e:
-        print(f"❌ خطأ في بناء الفهرس: {e}")
+        print(f"⚠️ خطأ جزئي في بناء الفهرس: {e}")
         import traceback
         traceback.print_exc()
     finally:
+        # Mark as ready even if partially built — some articles are better than none
+        from backend.rag.vector_store import get_collection
+        count = get_collection().count()
+        if count > 0:
+            _db_ready = True
+            print(f"✅ قاعدة البيانات جاهزة — {count} مادة متاحة")
+        else:
+            print("❌ فشل بناء قاعدة البيانات بالكامل")
         _db_building = False
 
 
