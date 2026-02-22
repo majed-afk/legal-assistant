@@ -1,5 +1,5 @@
 """
-FastAPI Backend — المساعد القانوني لنظام الأحوال الشخصية
+FastAPI Backend — المستشار القانوني الذكي (أحوال شخصية + إثبات + مرافعات)
 """
 from __future__ import annotations
 import json
@@ -46,8 +46,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="مساعد الأحوال الشخصية",
-    description="مساعد قانوني ذكي متخصص في نظام الأحوال الشخصية السعودي",
+    title="المستشار القانوني الذكي",
+    description="مساعد قانوني ذكي متخصص في أنظمة الأحوال الشخصية والإثبات والمرافعات الشرعية السعودية",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -93,10 +93,11 @@ async def health_check():
     count = get_collection_count()
     return {
         "status": "healthy",
-        "service": "مساعد الأحوال الشخصية",
+        "service": "المستشار القانوني الذكي",
         "vector_db_count": count,
         "db_ready": _db_ready,
-        "db_complete": count >= 765,
+        "db_complete": count >= 700,
+        "laws": ["أحوال شخصية", "إثبات", "مرافعات شرعية"],
     }
 
 

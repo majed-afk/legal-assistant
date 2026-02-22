@@ -146,6 +146,7 @@ def _make_metadata(article: dict) -> dict:
         "has_deadline": str(article.get("has_deadline", False)),
         "deadline_details": article.get("deadline_details", ""),
         "source_pages": article.get("source_pages", ""),
+        "law": article.get("law", "نظام الأحوال الشخصية"),
     }
 
 
