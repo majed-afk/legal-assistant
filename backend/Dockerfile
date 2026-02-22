@@ -8,19 +8,18 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 # Install dependencies (lightweight — no local ML models, uses Gemini API)
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
-# Copy backend code and data (articles.json needed for DB build)
+# Copy backend code and data (articles.json + embeddings.json)
 COPY backend/ /app/backend/
 
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Skip DB build at Docker build time — Gemini free tier rate limits
-# make it unreliable. Runtime builds the DB incrementally with retries.
+# Build ChromaDB from pre-computed embeddings (no API needed, ~5 seconds)
+RUN python -c "from backend.tools.setup_db import setup_database; setup_database()"
 
 # Clean up to reduce image size
 RUN rm -rf /root/.cache /tmp/*
 
 EXPOSE 8000
 
-# DB is built at runtime with resumable incremental builds
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
