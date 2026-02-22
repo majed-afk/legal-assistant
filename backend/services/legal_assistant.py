@@ -1,11 +1,11 @@
 """
 Claude API integration for legal consultations.
-Includes retry logic for rate limits.
+Includes retry logic for rate limits and streaming support.
 """
 from __future__ import annotations
 import json
 import time
-from typing import Optional
+from typing import Generator, Optional
 import anthropic
 from backend.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
@@ -89,6 +89,65 @@ def generate_legal_response(
     )
 
     return response.content[0].text
+
+
+def _build_messages(
+    question: str,
+    context: str,
+    classification: dict,
+    chat_history: Optional[list] = None,
+) -> list:
+    """Build messages list for Claude API."""
+    messages = []
+    if chat_history:
+        messages.extend(chat_history)
+
+    user_message = f"""السؤال: {question}
+التصنيف: {classification.get('category', 'عام')} | {classification.get('intent', 'استشارة')}
+
+📚 المواد النظامية المسترجعة:
+{context}
+
+⛔ أجب حصرياً من المواد أعلاه. لا تذكر مواد غير مقدمة لك."""
+
+    messages.append({"role": "user", "content": user_message})
+    return messages
+
+
+def stream_legal_response(
+    question: str,
+    context: str,
+    classification: dict,
+    chat_history: Optional[list] = None,
+) -> Generator[str, None, None]:
+    """Stream a legal response token-by-token using Claude API."""
+    client = get_client()
+    messages = _build_messages(question, context, classification, chat_history)
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            with client.messages.stream(
+                model=CLAUDE_MODEL,
+                max_tokens=4000,
+                system=SYSTEM_PROMPT,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    yield text
+            return  # Success, exit retry loop
+        except anthropic.RateLimitError:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt * 5
+                time.sleep(wait)
+            else:
+                raise
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < max_retries - 1:
+                wait = 2 ** attempt * 5
+                time.sleep(wait)
+            else:
+                raise
 
 
 def generate_draft(

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { askQuestion } from '@/lib/api';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { askQuestionStreaming } from '@/lib/api';
 import MessageBubble from './MessageBubble';
 
 interface Message {
@@ -9,6 +9,7 @@ interface Message {
   content: string;
   sources?: any[];
   classification?: any;
+  isStreaming?: boolean;
 }
 
 const QUICK_QUESTIONS = [
@@ -24,6 +25,8 @@ export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const streamingContentRef = useRef('');
+  const streamingMetaRef = useRef<{ sources?: any[]; classification?: any }>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -32,7 +35,7 @@ export default function ChatInterface() {
 
   useEffect(scrollToBottom, [messages]);
 
-  const sendMessage = async (question?: string) => {
+  const sendMessage = useCallback(async (question?: string) => {
     const q = question || input.trim();
     if (!q || loading) return;
 
@@ -40,32 +43,93 @@ export default function ChatInterface() {
     const userMsg: Message = { role: 'user', content: q };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
+    streamingContentRef.current = '';
+    streamingMetaRef.current = {};
 
-    try {
-      const chatHistory = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+    // Add empty streaming message
+    const streamingMsg: Message = {
+      role: 'assistant',
+      content: '',
+      isStreaming: true,
+    };
+    setMessages((prev) => [...prev, streamingMsg]);
 
-      const result = await askQuestion(q, chatHistory.length > 0 ? chatHistory : undefined);
+    const chatHistory = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
 
-      const assistantMsg: Message = {
-        role: 'assistant',
-        content: result.answer,
-        sources: result.sources,
-        classification: result.classification,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      const errorMsg: Message = {
-        role: 'assistant',
-        content: `⚠️ ${err.message || 'حدث خطأ في الاتصال. تأكد من تشغيل الخادم وإعداد مفتاح Claude API.'}`,
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    await askQuestionStreaming(
+      q,
+      {
+        onMeta: (data) => {
+          streamingMetaRef.current = {
+            sources: data.sources,
+            classification: data.classification,
+          };
+        },
+        onToken: (text) => {
+          streamingContentRef.current += text;
+          // Update the last message (streaming message)
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              content: streamingContentRef.current,
+              isStreaming: true,
+            };
+            return updated;
+          });
+        },
+        onDone: () => {
+          // Finalize the streaming message
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              content: streamingContentRef.current,
+              sources: streamingMetaRef.current.sources,
+              classification: streamingMetaRef.current.classification,
+              isStreaming: false,
+            };
+            return updated;
+          });
+          setLoading(false);
+        },
+        onError: (error) => {
+          if (streamingContentRef.current) {
+            // If we got partial content, keep it and add error
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: streamingContentRef.current + `\n\n⚠️ ${error}`,
+                isStreaming: false,
+              };
+              return updated;
+            });
+          } else {
+            // No content received, show error message
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              updated[lastIdx] = {
+                role: 'assistant',
+                content: `⚠️ ${error}`,
+                isStreaming: false,
+              };
+              return updated;
+            });
+          }
+          setLoading(false);
+        },
+      },
+      chatHistory.length > 0 ? chatHistory : undefined
+    );
+  }, [input, loading, messages]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen">
@@ -95,12 +159,12 @@ export default function ChatInterface() {
             {messages.map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
-            {loading && (
+            {loading && messages[messages.length - 1]?.content === '' && (
               <div className="flex items-center gap-2 p-3 sm:p-4 animate-fade-in">
                 <div className="loading-dot" />
                 <div className="loading-dot" />
                 <div className="loading-dot" />
-                <span className="text-sm text-gray-400 mr-2">جاري التحليل...</span>
+                <span className="text-sm text-gray-400 mr-2">جاري الاتصال...</span>
               </div>
             )}
             <div ref={messagesEndRef} />

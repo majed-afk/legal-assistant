@@ -9,6 +9,7 @@ interface Props {
     content: string;
     sources?: any[];
     classification?: any;
+    isStreaming?: boolean;
   };
 }
 
@@ -70,8 +71,8 @@ export default function MessageBubble({ message }: Props) {
           <p className="text-sm leading-relaxed">{message.content}</p>
         ) : (
           <>
-            {/* Copy & Print buttons */}
-            <div className="flex items-center justify-end gap-2 mb-2 no-print">
+            {/* Copy & Print buttons - hidden during streaming */}
+            {!message.isStreaming && <div className="flex items-center justify-end gap-2 mb-2 no-print">
               <button
                 onClick={handleCopy}
                 className="flex items-center gap-1 px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
@@ -103,7 +104,7 @@ export default function MessageBubble({ message }: Props) {
                 </svg>
                 <span>طباعة</span>
               </button>
-            </div>
+            </div>}
 
             <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed font-legal">
               <ReactMarkdown
@@ -139,6 +140,9 @@ export default function MessageBubble({ message }: Props) {
               >
                 {message.content}
               </ReactMarkdown>
+              {message.isStreaming && (
+                <span className="inline-block w-2 h-5 bg-primary-600 animate-pulse mr-1 align-text-bottom" />
+              )}
             </div>
           </>
         )}

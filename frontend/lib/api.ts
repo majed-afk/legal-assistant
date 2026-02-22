@@ -1,8 +1,100 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
+// --- Streaming API ---
+
+interface StreamCallbacks {
+  onMeta: (data: { classification: any; sources: any[]; has_deadlines: boolean }) => void;
+  onToken: (text: string) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+export async function askQuestionStreaming(
+  question: string,
+  callbacks: StreamCallbacks,
+  chatHistory?: any[]
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 120s timeout
+
+  try {
+    const res = await fetch(`${API_BASE}/ask-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, chat_history: chatHistory }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'خطأ في الاتصال' }));
+      throw new Error(err.detail || 'حدث خطأ');
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Streaming غير مدعوم');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events from buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+
+          switch (event.type) {
+            case 'meta':
+              callbacks.onMeta({
+                classification: event.classification,
+                sources: event.sources,
+                has_deadlines: event.has_deadlines,
+              });
+              break;
+            case 'token':
+              callbacks.onToken(event.text);
+              break;
+            case 'done':
+              callbacks.onDone();
+              break;
+            case 'error':
+              callbacks.onError(event.message);
+              break;
+          }
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      callbacks.onError('انتهت المهلة — جرب مرة أخرى');
+    } else {
+      callbacks.onError(e.message || 'حدث خطأ في الاتصال');
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return controller;
+}
+
+// --- Legacy non-streaming API (kept for backward compatibility) ---
+
 export async function askQuestion(question: string, chatHistory?: any[]) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
     const res = await fetch(`${API_BASE}/ask`, {
       method: 'POST',
@@ -49,7 +141,7 @@ export async function getTopics() {
 
 export async function draftDocument(draftType: string, caseDetails: any) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout for drafts
+  const timeout = setTimeout(() => controller.abort(), 120000);
   try {
     const res = await fetch(`${API_BASE}/draft`, {
       method: 'POST',

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # Track whether vector DB is ready (for health check)
@@ -136,6 +137,64 @@ async def ask_question(req: QuestionRequest):
         "sources": rag_result["sources"],
         "has_deadlines": rag_result["classification"].get("needs_deadline_check", False),
     }
+
+
+@app.post("/api/ask-stream")
+async def ask_question_stream(req: QuestionRequest):
+    """Legal consultation endpoint with SSE streaming."""
+    from backend.rag.pipeline import retrieve_context
+    from backend.services.legal_assistant import stream_legal_response
+
+    if not req.question.strip():
+        raise HTTPException(status_code=400, detail="السؤال مطلوب")
+
+    if not _db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
+        )
+
+    rag_result = retrieve_context(req.question)
+
+    def event_stream():
+        # Send metadata first (classification + sources)
+        meta = json.dumps({
+            "type": "meta",
+            "classification": rag_result["classification"],
+            "sources": rag_result["sources"],
+            "has_deadlines": rag_result["classification"].get("needs_deadline_check", False),
+        }, ensure_ascii=False)
+        yield f"data: {meta}\n\n"
+
+        # Stream Claude response token by token
+        try:
+            for token in stream_legal_response(
+                question=req.question,
+                context=rag_result["context"],
+                classification=rag_result["classification"],
+                chat_history=req.chat_history,
+            ):
+                chunk = json.dumps({"type": "token", "text": token}, ensure_ascii=False)
+                yield f"data: {chunk}\n\n"
+
+            # Signal completion
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            error = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
+            yield f"data: {error}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/search")
