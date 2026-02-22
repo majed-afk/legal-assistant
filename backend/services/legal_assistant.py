@@ -97,10 +97,18 @@ def _build_messages(
     classification: dict,
     chat_history: Optional[list] = None,
 ) -> list:
-    """Build messages list for Claude API."""
+    """Build messages list for Claude API with token-safe chat history."""
     messages = []
     if chat_history:
-        messages.extend(chat_history)
+        # Limit to last 4 messages and trim assistant content to reduce tokens
+        recent = chat_history[-4:]
+        for msg in recent:
+            trimmed = {**msg}
+            if trimmed.get("role") == "assistant":
+                content = trimmed.get("content", "")
+                if len(content) > 500:
+                    trimmed["content"] = content[:500] + "..."
+            messages.append(trimmed)
 
     user_message = f"""السؤال: {question}
 التصنيف: {classification.get('category', 'عام')} | {classification.get('intent', 'استشارة')}

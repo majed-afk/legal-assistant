@@ -54,9 +54,14 @@ export default function ChatInterface() {
     };
     setMessages((prev) => [...prev, streamingMsg]);
 
-    const chatHistory = messages.map((m) => ({
+    // Limit chat history to last 4 messages and trim assistant responses
+    // to reduce token count and avoid rate limits
+    const recentMessages = messages.slice(-4);
+    const chatHistory = recentMessages.map((m) => ({
       role: m.role,
-      content: m.content,
+      content: m.role === 'assistant'
+        ? m.content.slice(0, 500) + (m.content.length > 500 ? '...' : '')
+        : m.content,
     }));
 
     await askQuestionStreaming(

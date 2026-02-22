@@ -183,7 +183,17 @@ async def ask_question_stream(req: QuestionRequest):
         except Exception as e:
             import traceback
             traceback.print_exc()
-            error = json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
+            # Show user-friendly Arabic error instead of raw API errors
+            error_msg = str(e)
+            if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                user_error = "الخادم مشغول حالياً — يرجى الانتظار بضع ثوانٍ ثم إعادة المحاولة"
+            elif "overloaded" in error_msg.lower() or "529" in error_msg:
+                user_error = "الخادم مشغول — يرجى المحاولة مرة أخرى بعد لحظات"
+            elif "api_key" in error_msg.lower() or "auth" in error_msg.lower():
+                user_error = "خطأ في إعدادات النظام — يرجى التواصل مع الإدارة"
+            else:
+                user_error = "حدث خطأ أثناء معالجة طلبك — يرجى المحاولة مرة أخرى"
+            error = json.dumps({"type": "error", "message": user_error}, ensure_ascii=False)
             yield f"data: {error}\n\n"
 
     return StreamingResponse(
