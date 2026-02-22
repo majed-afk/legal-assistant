@@ -15,8 +15,8 @@ out/
 .env
 .env.local
 
-# ChromaDB — pre-built index shipped with Docker image (765 articles)
-# backend/chroma_db/
+# ChromaDB — built at Docker build time via Gemini Embedding API
+backend/chroma_db/
 
 # PDFs (too large for git)
 *.pdf

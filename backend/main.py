@@ -16,7 +16,7 @@ _db_ready = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ChromaDB at startup — pre-built index ships with Docker image."""
+    """Initialize ChromaDB at startup — index is pre-built during Docker build."""
     global _db_ready
     print("⏳ جاري تهيئة ChromaDB...")
     from backend.rag.vector_store import get_collection
@@ -27,9 +27,22 @@ async def lifespan(app: FastAPI):
         _db_ready = True
         print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
     else:
-        print("❌ قاعدة البيانات فارغة — تأكد من وجود chroma_db/ في Docker image")
+        # Fallback: build DB at runtime if Docker build step was skipped
+        print("⚠️ قاعدة البيانات فارغة — محاولة البناء في الخلفية...")
+        import threading
+        def _build():
+            global _db_ready
+            try:
+                from backend.tools.setup_db import setup_database
+                setup_database()
+                from backend.rag.vector_store import get_collection_count
+                if get_collection_count() > 0:
+                    _db_ready = True
+                    print("✅ تم بناء قاعدة البيانات بنجاح")
+            except Exception as e:
+                print(f"❌ فشل بناء قاعدة البيانات: {e}")
+        threading.Thread(target=_build, daemon=True).start()
 
-    print("✅ Embeddings عبر Gemini API (بدون نموذج محلي — ذاكرة خفيفة)")
     print("🚀 السيرفر جاهز لاستقبال الطلبات")
     yield
 
