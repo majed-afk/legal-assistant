@@ -1,0 +1,103 @@
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+
+export async function askQuestion(question: string, chatHistory?: any[]) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
+  try {
+    const res = await fetch(`${API_BASE}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, chat_history: chatHistory }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'خطأ في الاتصال' }));
+      throw new Error(err.detail || 'حدث خطأ');
+    }
+    return res.json();
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('انتهت المهلة — جرب مرة أخرى');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function searchArticles(query: string, topic?: string) {
+  const res = await fetch(`${API_BASE}/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, topic, top_k: 10 }),
+  });
+  if (!res.ok) throw new Error('خطأ في البحث');
+  return res.json();
+}
+
+export async function getArticles() {
+  const res = await fetch(`${API_BASE}/articles`);
+  if (!res.ok) throw new Error('خطأ في تحميل المواد');
+  return res.json();
+}
+
+export async function getTopics() {
+  const res = await fetch(`${API_BASE}/articles/topics`);
+  if (!res.ok) throw new Error('خطأ');
+  return res.json();
+}
+
+export async function draftDocument(draftType: string, caseDetails: any) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout for drafts
+  try {
+    const res = await fetch(`${API_BASE}/draft`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft_type: draftType, case_details: caseDetails }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'خطأ في صياغة المذكرة' }));
+      throw new Error(err.detail || 'حدث خطأ');
+    }
+    return res.json();
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      throw new Error('انتهت المهلة — جرب مرة أخرى');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function getDraftTypes() {
+  const res = await fetch(`${API_BASE}/draft/types`);
+  if (!res.ok) throw new Error('خطأ');
+  return res.json();
+}
+
+export async function calculateDeadline(eventType: string, eventDate: string, details?: any) {
+  const res = await fetch(`${API_BASE}/deadline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_type: eventType, event_date: eventDate, details }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'خطأ' }));
+    throw new Error(err.detail || 'حدث خطأ');
+  }
+  return res.json();
+}
+
+export async function getDeadlineTypes() {
+  const res = await fetch(`${API_BASE}/deadline/types`);
+  if (!res.ok) throw new Error('خطأ');
+  return res.json();
+}
+
+export async function healthCheck() {
+  const res = await fetch(`${API_BASE}/health`);
+  return res.json();
+}

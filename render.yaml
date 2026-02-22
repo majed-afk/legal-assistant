@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: legal-assistant-api
+    runtime: python
+    region: frankfurt
+    plan: free
+    buildCommand: bash build.sh
+    startCommand: bash start.sh
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11"
