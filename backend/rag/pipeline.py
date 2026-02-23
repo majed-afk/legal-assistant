@@ -225,7 +225,7 @@ def retrieve_context(question: str, top_k: int = 5, chat_history: list | None = 
     semantic_results = search(query_embedding, n_results=top_k * 2)
 
     # === 2. Keyword-based topic search (for precision) ===
-    detected_topics = _detect_topics(question)
+    detected_topics = _detect_topics(enriched_question)
     filtered_results = None
 
     if detected_topics:
