@@ -167,17 +167,59 @@ LEGAL_TERM_MAP = {
 }
 
 
-def retrieve_context(question: str, top_k: int = 5) -> dict:
+def _enrich_followup(question: str, chat_history: list | None) -> str:
+    """Enrich a follow-up question with context from chat history.
+
+    When a user asks a short follow-up like "من هي المحكمة ذات الاختصاص؟"
+    after discussing custody/divorce, we combine the original topic with the
+    new question so the RAG pipeline finds the right articles.
+    """
+    if not chat_history:
+        return question
+
+    q = question.strip()
+
+    # Heuristic: short questions (< 40 chars) with no legal keywords
+    # are likely follow-ups that need context enrichment
+    detected = _detect_topics(q)
+    if detected and len(detected) >= 2:
+        return question  # Already has enough context
+
+    # Extract topic keywords from recent user messages in chat history
+    topic_keywords = []
+    for msg in reversed(chat_history[-4:]):
+        if msg.get("role") == "user":
+            prev_topics = _detect_topics(msg.get("content", ""))
+            for t in prev_topics:
+                if t not in topic_keywords:
+                    topic_keywords.append(t)
+            if topic_keywords:
+                break  # Use the most recent user message's topics
+
+    if not topic_keywords:
+        return question
+
+    # Build enriched query: original question + topic context
+    topic_str = " ".join(topic_keywords[:2])
+    enriched = f"{question} ({topic_str})"
+    print(f"🔗 Enriched follow-up: '{question}' → '{enriched}'")
+    return enriched
+
+
+def retrieve_context(question: str, top_k: int = 5, chat_history: list | None = None) -> dict:
     """
     Hybrid retrieval: semantic search + keyword-based topic filtering.
     Merges topic-matched results (high precision) with semantic results (recall).
     """
-    cache_key = question.strip()
+    # Enrich follow-up questions with context from chat history
+    enriched_question = _enrich_followup(question, chat_history)
+
+    cache_key = enriched_question.strip()
     if cache_key in _rag_cache:
         return _rag_cache[cache_key]
 
-    classification = classify_query(question)
-    query_embedding = embed_query_list(question)
+    classification = classify_query(question)  # Classify original question
+    query_embedding = embed_query_list(enriched_question)  # Search with enriched
 
     # === 1. Broad semantic search (for recall) ===
     semantic_results = search(query_embedding, n_results=top_k * 2)

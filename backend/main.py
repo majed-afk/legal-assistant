@@ -121,7 +121,7 @@ async def ask_question(req: QuestionRequest):
             detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
         )
 
-    rag_result = retrieve_context(req.question)
+    rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
     try:
         answer = generate_legal_response(
@@ -160,7 +160,7 @@ async def ask_question_stream(req: QuestionRequest):
             detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
         )
 
-    rag_result = retrieve_context(req.question)
+    rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
     def event_stream():
         # Send metadata first (classification + sources)
