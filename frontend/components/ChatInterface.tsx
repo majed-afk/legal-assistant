@@ -143,9 +143,9 @@ export default function ChatInterface() {
         {messages.length === 0 ? (
           <div className="max-w-2xl mx-auto mt-8 lg:mt-16 text-center px-2">
             <div className="text-5xl lg:text-6xl mb-3 lg:mb-4">⚖️</div>
-            <h2 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2">مساعد الأحوال الشخصية</h2>
+            <h2 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2">المستشار القانوني الذكي</h2>
             <p className="text-sm lg:text-base text-gray-500 mb-6 lg:mb-8">
-              اسأل أي سؤال عن نظام الأحوال الشخصية السعودي
+              اسأل أي سؤال عن الأحوال الشخصية أو الإثبات أو المرافعات الشرعية
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
               {QUICK_QUESTIONS.map((q, i) => (

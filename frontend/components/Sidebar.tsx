@@ -68,7 +68,7 @@ export default function Sidebar() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-primary-800">⚖️ المساعد القانوني</h1>
-              <p className="text-xs text-gray-500 mt-1">نظام الأحوال الشخصية</p>
+              <p className="text-xs text-gray-500 mt-1">أحوال شخصية • إثبات • مرافعات</p>
             </div>
             {/* Close button on mobile */}
             <button

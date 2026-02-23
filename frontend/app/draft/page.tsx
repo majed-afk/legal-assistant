@@ -68,7 +68,7 @@ export default function DraftPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">📝 صياغة المذكرات</h1>
-      <p className="text-gray-500 text-sm mb-4 sm:mb-6">صياغة مذكرات قانونية مبنية على نظام الأحوال الشخصية</p>
+      <p className="text-gray-500 text-sm mb-4 sm:mb-6">صياغة مذكرات قانونية مبنية على الأنظمة السعودية</p>
 
       {/* Draft type selection */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 mb-4 sm:mb-6">

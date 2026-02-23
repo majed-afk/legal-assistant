@@ -3,8 +3,8 @@ import './globals.css';
 import Sidebar from '@/components/Sidebar';
 
 export const metadata: Metadata = {
-  title: 'مساعد الأحوال الشخصية',
-  description: 'مساعد قانوني ذكي متخصص في نظام الأحوال الشخصية السعودي',
+  title: 'المستشار القانوني الذكي',
+  description: 'مساعد قانوني ذكي متخصص في الأنظمة السعودية: الأحوال الشخصية والإثبات والمرافعات الشرعية',
 };
 
 export const viewport: Viewport = {

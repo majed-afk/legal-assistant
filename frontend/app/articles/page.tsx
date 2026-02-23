@@ -45,7 +45,7 @@ export default function ArticlesPage() {
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
       <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2">📖 استعراض النظام</h1>
-      <p className="text-gray-500 text-sm mb-4 sm:mb-6">ابحث في مواد نظام الأحوال الشخصية</p>
+      <p className="text-gray-500 text-sm mb-4 sm:mb-6">ابحث في مواد الأنظمة الثلاثة</p>
 
       {/* Search */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
