@@ -8,7 +8,11 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: GOOGLE_API_KEY
+      - key: API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: RATE_LIMIT_PER_DAY
+        value: "100"
