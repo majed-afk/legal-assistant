@@ -80,14 +80,9 @@ def build_context_string(results: dict, classification: dict) -> str:
     distances = results["distances"][0]
 
     for i, (doc, meta, dist) in enumerate(zip(documents, metadatas, distances)):
-        chapter = meta.get("chapter", "")
-        if "الإثبات" in chapter:
-            law_name = "نظام الإثبات"
-        elif "المرافعات" in chapter:
-            law_name = "نظام المرافعات الشرعية"
-        else:
-            law_name = "نظام الأحوال الشخصية"
-        parts.append(f"[{i+1}] {law_name} | {meta.get('section', '')}")
+        law_name = meta.get("law", "نظام الأحوال الشخصية")
+        section = meta.get("section", "")
+        parts.append(f"[{i+1}] {law_name} | {section}" if section else f"[{i+1}] {law_name}")
         parts.append(doc)
         if meta.get("has_deadline") == "True":
             parts.append(f"⏰ مهلة: {meta.get('deadline_details', '')}")

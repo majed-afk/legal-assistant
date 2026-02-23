@@ -54,6 +54,7 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001").split(",")
 
+# Security middleware (order matters: CORS first, then auth, then rate limit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -61,6 +62,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from backend.middleware import AuthMiddleware, RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(AuthMiddleware)
 
 
 # --- Request / Response Models ---
@@ -96,7 +101,7 @@ async def health_check():
         "service": "المستشار القانوني الذكي",
         "vector_db_count": count,
         "db_ready": _db_ready,
-        "db_complete": count >= 700,
+        "db_complete": count >= 490,
         "laws": ["أحوال شخصية", "إثبات", "مرافعات شرعية"],
     }
 

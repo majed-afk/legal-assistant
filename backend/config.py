@@ -10,3 +10,8 @@ CHROMA_PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
 ARTICLES_JSON_PATH = os.path.join(os.path.dirname(__file__), "data", "articles.json")
 PDF_EXPLANATION_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "شرح نظام الأحوال الشخصية.pdf")
 PDF_REGULATIONS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pdf.pdf")
+
+# Security
+API_KEY = os.getenv("API_KEY", "")  # Required API key for protected endpoints
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
+RATE_LIMIT_PER_DAY = int(os.getenv("RATE_LIMIT_PER_DAY", "100"))

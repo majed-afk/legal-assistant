@@ -138,14 +138,21 @@ def setup_database(force_rebuild: bool = False):
 
 def _make_metadata(article: dict) -> dict:
     """Create ChromaDB metadata for an article."""
+    # Ensure all values are non-empty strings (ChromaDB rejects empty lists)
+    source_pages = article.get("source_pages", "")
+    if isinstance(source_pages, list):
+        source_pages = ", ".join(str(p) for p in source_pages) if source_pages else ""
+    topic_tags = article.get("topic_tags", [])
+    if isinstance(topic_tags, list):
+        topic_tags = ",".join(str(t) for t in topic_tags) if topic_tags else ""
     return {
-        "chapter": article.get("chapter", ""),
-        "section": article.get("section", ""),
-        "topic": article.get("topic", ""),
-        "topic_tags": ",".join(article.get("topic_tags", [])),
+        "chapter": article.get("chapter", "") or "",
+        "section": article.get("section", "") or "",
+        "topic": article.get("topic", "") or "",
+        "topic_tags": topic_tags,
         "has_deadline": str(article.get("has_deadline", False)),
-        "deadline_details": article.get("deadline_details", ""),
-        "source_pages": article.get("source_pages", ""),
+        "deadline_details": article.get("deadline_details", "") or "",
+        "source_pages": source_pages,
         "law": article.get("law", "نظام الأحوال الشخصية"),
     }
 

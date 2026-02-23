@@ -1,4 +1,12 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+
+/** Common headers for all API requests (includes API key if configured). */
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (API_KEY) headers['X-API-Key'] = API_KEY;
+  return headers;
+}
 
 // --- Streaming API ---
 
@@ -20,7 +28,7 @@ export async function askQuestionStreaming(
   try {
     const res = await fetch(`${API_BASE}/ask-stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(),
       body: JSON.stringify({ question, chat_history: chatHistory }),
       signal: controller.signal,
     });
@@ -98,7 +106,7 @@ export async function askQuestion(question: string, chatHistory?: any[]) {
   try {
     const res = await fetch(`${API_BASE}/ask`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(),
       body: JSON.stringify({ question, chat_history: chatHistory }),
       signal: controller.signal,
     });
@@ -120,7 +128,7 @@ export async function askQuestion(question: string, chatHistory?: any[]) {
 export async function searchArticles(query: string, topic?: string) {
   const res = await fetch(`${API_BASE}/search`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ query, topic, top_k: 10 }),
   });
   if (!res.ok) throw new Error('خطأ في البحث');
@@ -128,13 +136,13 @@ export async function searchArticles(query: string, topic?: string) {
 }
 
 export async function getArticles() {
-  const res = await fetch(`${API_BASE}/articles`);
+  const res = await fetch(`${API_BASE}/articles`, { headers: getHeaders() });
   if (!res.ok) throw new Error('خطأ في تحميل المواد');
   return res.json();
 }
 
 export async function getTopics() {
-  const res = await fetch(`${API_BASE}/articles/topics`);
+  const res = await fetch(`${API_BASE}/articles/topics`, { headers: getHeaders() });
   if (!res.ok) throw new Error('خطأ');
   return res.json();
 }
@@ -145,7 +153,7 @@ export async function draftDocument(draftType: string, caseDetails: any) {
   try {
     const res = await fetch(`${API_BASE}/draft`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(),
       body: JSON.stringify({ draft_type: draftType, case_details: caseDetails }),
       signal: controller.signal,
     });
@@ -165,7 +173,7 @@ export async function draftDocument(draftType: string, caseDetails: any) {
 }
 
 export async function getDraftTypes() {
-  const res = await fetch(`${API_BASE}/draft/types`);
+  const res = await fetch(`${API_BASE}/draft/types`, { headers: getHeaders() });
   if (!res.ok) throw new Error('خطأ');
   return res.json();
 }
@@ -173,7 +181,7 @@ export async function getDraftTypes() {
 export async function calculateDeadline(eventType: string, eventDate: string, details?: any) {
   const res = await fetch(`${API_BASE}/deadline`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: JSON.stringify({ event_type: eventType, event_date: eventDate, details }),
   });
   if (!res.ok) {
@@ -184,7 +192,7 @@ export async function calculateDeadline(eventType: string, eventDate: string, de
 }
 
 export async function getDeadlineTypes() {
-  const res = await fetch(`${API_BASE}/deadline/types`);
+  const res = await fetch(`${API_BASE}/deadline/types`, { headers: getHeaders() });
   if (!res.ok) throw new Error('خطأ');
   return res.json();
 }
