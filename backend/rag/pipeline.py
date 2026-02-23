@@ -1,25 +1,45 @@
 """
 Full RAG pipeline: from user question to relevant legal context.
-Includes caching for repeated queries.
+Hybrid search: combines semantic (vector) search with keyword-based topic filtering.
+This compensates for the multilingual model's weaker Arabic legal term understanding.
 """
 from __future__ import annotations
-from functools import lru_cache
 from backend.rag.embeddings import embed_query_list
 from backend.rag.vector_store import search
 from backend.rag.classifier import classify_query
 
-# Cache for RAG results (question -> context). Stores last 128 unique questions.
+# Cache for RAG results (question -> context).
 _rag_cache: dict[str, dict] = {}
 _RAG_CACHE_MAX = 32
+
+# Legal terms → exact ChromaDB topic names for precise filtering
+LEGAL_TERM_MAP = {
+    # أحوال شخصية
+    "خلع": "الخلع", "مخالعة": "الخلع", "افتداء": "الخلع",
+    "طلاق": "الطلاق", "تطليق": "الطلاق", "رجعي": "الطلاق", "بائن": "الطلاق", "مراجعة": "الطلاق",
+    "حضانة": "الحضانة", "محضون": "الحضانة", "حاضن": "الحضانة",
+    "نفقة": "النفقة", "نفقة الزوجة": "النفقة", "نفقة الأولاد": "نفقة الأقارب",
+    "مهر": "المهر", "صداق": "المهر",
+    "عدة": "العدة", "عدة الوفاة": "العدة", "عدة الطلاق": "العدة",
+    "نسب": "النسب", "إثبات النسب": "النسب", "لعان": "النسب",
+    "خطبة": "الخطبة", "خاطب": "الخطبة",
+    "فسخ": "فسخ النكاح", "تفريق": "فسخ النكاح",
+    "تفريق للضرر": "فسخ النكاح", "شقاق": "فسخ النكاح", "ضرر": "فسخ النكاح",
+    "وصية": "الوصية", "موصي": "الوصية", "موصى": "الوصية",
+    "إرث": "أحكام الإرث", "ميراث": "أحكام الإرث", "تركة": "أحكام الإرث", "ورثة": "أحكام الإرث",
+    "فرض": "الإرث بالفرض", "تعصيب": "التعصيب", "حجب": "الحجب",
+    "وصاية": "الوصاية", "وصي": "الوصاية", "قاصر": "الولاية على القاصر",
+    "مفقود": "الغائب والمفقود", "غائب": "الغائب والمفقود",
+    "زواج": "عقد الزواج", "نكاح": "عقد الزواج",
+    "ولي": "الولاية في الزواج",
+}
 
 
 def retrieve_context(question: str, top_k: int = 5) -> dict:
     """
-    Retrieve relevant legal articles for a question.
-    Returns classified query + relevant context string.
-    Uses cache for repeated questions.
+    Hybrid retrieval: semantic search + keyword-based topic filtering.
+    Merges topic-matched results (high precision) with semantic results (recall).
     """
-    # Check cache first
     cache_key = question.strip()
     if cache_key in _rag_cache:
         return _rag_cache[cache_key]
@@ -27,39 +47,33 @@ def retrieve_context(question: str, top_k: int = 5) -> dict:
     classification = classify_query(question)
     query_embedding = embed_query_list(question)
 
-    # Search with topic filter if we have a clear category
-    where_filter = None
-    category = classification["category"]
-    if category != "عام":
-        # Try both with and without "ال" prefix since topics may vary
-        category_with_al = "ال" + category if not category.startswith("ال") else category
-        category_without_al = category[2:] if category.startswith("ال") else category
-        where_filter = {
-            "$or": [
-                {"topic": {"$eq": category}},
-                {"topic": {"$eq": category_with_al}},
-                {"topic": {"$eq": category_without_al}},
-            ]
-        }
+    # === 1. Broad semantic search (for recall) ===
+    semantic_results = search(query_embedding, n_results=top_k * 2)
 
-    results = search(query_embedding, n_results=top_k, where=where_filter)
+    # === 2. Keyword-based topic search (for precision) ===
+    detected_topics = _detect_topics(question)
+    filtered_results = None
 
-    # If filtered search returns too few results, do unfiltered search
-    if not results["documents"] or not results["documents"][0] or len(results["documents"][0]) < 3:
-        results = search(query_embedding, n_results=top_k)
+    if detected_topics:
+        for topic in detected_topics[:2]:
+            where_filter = {"topic": {"$eq": topic}}
+            filtered_results = search(query_embedding, n_results=top_k, where=where_filter)
+            if filtered_results["documents"] and filtered_results["documents"][0]:
+                break
 
-    context = build_context_string(results, classification)
+    # === 3. Merge: topic-matched first (precise), then semantic (broad) ===
+    merged = _merge_results(semantic_results, filtered_results, top_k)
+
+    context = build_context_string(merged, classification)
 
     result = {
         "classification": classification,
         "context": context,
-        "sources": extract_sources(results),
-        "num_results": len(results["documents"][0]) if results["documents"] else 0,
+        "sources": extract_sources(merged),
+        "num_results": len(merged["documents"][0]) if merged["documents"] else 0,
     }
 
-    # Cache the result
     if len(_rag_cache) >= _RAG_CACHE_MAX:
-        # Remove oldest entry
         oldest_key = next(iter(_rag_cache))
         del _rag_cache[oldest_key]
     _rag_cache[cache_key] = result
@@ -67,19 +81,77 @@ def retrieve_context(question: str, top_k: int = 5) -> dict:
     return result
 
 
+def _detect_topics(question: str) -> list[str]:
+    """Detect specific legal topics from question keywords (longest match first)."""
+    topics = []
+    seen = set()
+    # Sort by key length descending for longest-match-first
+    sorted_terms = sorted(LEGAL_TERM_MAP.items(), key=lambda x: len(x[0]), reverse=True)
+    for term, topic in sorted_terms:
+        if term in question and topic not in seen:
+            topics.append(topic)
+            seen.add(topic)
+    return topics
+
+
+def _merge_results(semantic: dict, filtered: dict | None, top_k: int) -> dict:
+    """Merge filtered (high precision) + semantic (broad recall), deduplicated."""
+    if not filtered or not filtered["documents"] or not filtered["documents"][0]:
+        return _trim(semantic, top_k)
+
+    seen = set()
+    docs, metas, dists = [], [], []
+
+    # Filtered results first (they match the legal topic)
+    for doc, meta, dist in zip(
+        filtered["documents"][0], filtered["metadatas"][0], filtered["distances"][0],
+    ):
+        key = doc[:100]
+        if key not in seen:
+            seen.add(key)
+            docs.append(doc)
+            metas.append(meta)
+            dists.append(dist)
+
+    # Then semantic results (for additional context)
+    if semantic["documents"] and semantic["documents"][0]:
+        for doc, meta, dist in zip(
+            semantic["documents"][0], semantic["metadatas"][0], semantic["distances"][0],
+        ):
+            key = doc[:100]
+            if key not in seen:
+                seen.add(key)
+                docs.append(doc)
+                metas.append(meta)
+                dists.append(dist)
+
+    return {
+        "documents": [docs[:top_k]],
+        "metadatas": [metas[:top_k]],
+        "distances": [dists[:top_k]],
+    }
+
+
+def _trim(results: dict, top_k: int) -> dict:
+    if not results["documents"] or not results["documents"][0]:
+        return results
+    return {
+        "documents": [results["documents"][0][:top_k]],
+        "metadatas": [results["metadatas"][0][:top_k]],
+        "distances": [results["distances"][0][:top_k]],
+    }
+
+
 def build_context_string(results: dict, classification: dict) -> str:
     """Build a formatted context string from search results."""
     parts = []
-
     if not results["documents"] or not results["documents"][0]:
         parts.append("لم يتم العثور على مواد ذات صلة.")
         return "\n".join(parts)
 
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
-
-    for i, (doc, meta, dist) in enumerate(zip(documents, metadatas, distances)):
+    for i, (doc, meta, dist) in enumerate(zip(
+        results["documents"][0], results["metadatas"][0], results["distances"][0],
+    )):
         law_name = meta.get("law", "نظام الأحوال الشخصية")
         section = meta.get("section", "")
         parts.append(f"[{i+1}] {law_name} | {section}" if section else f"[{i+1}] {law_name}")
@@ -96,7 +168,6 @@ def extract_sources(results: dict) -> list[dict]:
     sources = []
     if not results["metadatas"] or not results["metadatas"][0]:
         return sources
-
     for meta in results["metadatas"][0]:
         sources.append({
             "chapter": meta.get("chapter", ""),

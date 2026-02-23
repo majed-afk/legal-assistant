@@ -5,10 +5,7 @@ WORKDIR /app
 # Copy requirements first for caching
 COPY backend/requirements.txt /app/backend/requirements.txt
 
-# Install PyTorch CPU-only first (much smaller than default GPU version)
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
-
-# Install remaining dependencies
+# Install dependencies (uses ONNX runtime — no PyTorch needed, ~200MB vs ~2GB)
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Copy backend code and data (articles.json + embeddings.json)
