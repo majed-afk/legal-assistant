@@ -1,6 +1,7 @@
 """
 Claude API integration for legal consultations.
 Includes retry logic for rate limits and streaming support.
+Supports two model modes: 1.1 (quick) and 2.1 (detailed).
 """
 from __future__ import annotations
 import json
@@ -30,7 +31,12 @@ def _call_claude_with_retry(client, max_retries=3, **kwargs):
             else:
                 raise
 
-SYSTEM_PROMPT = """أنت مستشار قانوني سعودي ودود ومتمكن. اسمك: المستشار القانوني الذكي.
+
+# ══════════════════════════════════════════════════════════════
+# نموذج 2.1 — مفصّل (الافتراضي)
+# ══════════════════════════════════════════════════════════════
+
+SYSTEM_PROMPT = """أنت سند — مستشار قانوني سعودي ودود ومتمكن.
 تتحدث مع أشخاص عاديين (مو محامين) — بسّط الكلام، كن قريباً منهم، وساعدهم يفهمون حقوقهم.
 
 ## تخصصاتك (3 أنظمة)
@@ -95,6 +101,43 @@ SYSTEM_PROMPT = """أنت مستشار قانوني سعودي ودود ومتم
 اختم الإجابة الشاملة دائماً بـ: ⚖️ هذه استشارة أولية لا تُغني عن مراجعة محامي مرخص."""
 
 
+# ══════════════════════════════════════════════════════════════
+# نموذج 1.1 — سريع
+# ══════════════════════════════════════════════════════════════
+
+SYSTEM_PROMPT_QUICK = """أنت سند — مستشار قانوني سعودي ذكي وسريع.
+متخصص في: الأحوال الشخصية، الإثبات، المرافعات الشرعية.
+
+## قواعد الإجابة
+- أجب بإيجاز ووضوح — أعطِ المعلومة مباشرة بدون إطالة
+- اذكر رقم المادة واسم النظام فقط (بدون نقل نص المادة كاملاً)
+- أجب حصرياً من المواد المرفقة — لا تخترع مواداً
+- إذا لم تجد الإجابة: "لم أجد نصاً يعالج هذه المسألة في المواد المتوفرة"
+- استخدم الفصحى الواضحة البسيطة
+- افهم العامية السعودية لكن أجب بالفصحى
+- إذا كان السؤال غامضاً جداً: اسأل سؤالاً واحداً فقط
+
+⚖️ هذه استشارة أولية لا تُغني عن مراجعة محامي مرخص."""
+
+
+# ══════════════════════════════════════════════════════════════
+# Model mode configuration
+# ══════════════════════════════════════════════════════════════
+
+def _get_model_config(model_mode: str = "2.1") -> dict:
+    """Get system prompt and max_tokens based on model mode."""
+    if model_mode == "1.1":
+        return {
+            "system_prompt": SYSTEM_PROMPT_QUICK,
+            "max_tokens": 1500,
+        }
+    else:  # "2.1" (default)
+        return {
+            "system_prompt": SYSTEM_PROMPT,
+            "max_tokens": 4000,
+        }
+
+
 def get_client() -> anthropic.Anthropic:
     if not ANTHROPIC_API_KEY:
         raise ValueError("ANTHROPIC_API_KEY غير مُعَد. أضف المفتاح في ملف .env")
@@ -106,9 +149,11 @@ def generate_legal_response(
     context: str,
     classification: dict,
     chat_history: Optional[list] = None,
+    model_mode: str = "2.1",
 ) -> str:
     """Generate a legal response using Claude API."""
     client = get_client()
+    config = _get_model_config(model_mode)
     messages = []
 
     if chat_history:
@@ -127,8 +172,8 @@ def generate_legal_response(
     response = _call_claude_with_retry(
         client,
         model=CLAUDE_MODEL,
-        max_tokens=4000,
-        system=SYSTEM_PROMPT,
+        max_tokens=config["max_tokens"],
+        system=config["system_prompt"],
         messages=messages,
     )
 
@@ -171,9 +216,11 @@ def stream_legal_response(
     context: str,
     classification: dict,
     chat_history: Optional[list] = None,
+    model_mode: str = "2.1",
 ) -> Generator[str, None, None]:
     """Stream a legal response token-by-token using Claude API."""
     client = get_client()
+    config = _get_model_config(model_mode)
     messages = _build_messages(question, context, classification, chat_history)
 
     max_retries = 3
@@ -181,8 +228,8 @@ def stream_legal_response(
         try:
             with client.messages.stream(
                 model=CLAUDE_MODEL,
-                max_tokens=4000,
-                system=SYSTEM_PROMPT,
+                max_tokens=config["max_tokens"],
+                system=config["system_prompt"],
                 messages=messages,
             ) as stream:
                 for text in stream.text_stream:

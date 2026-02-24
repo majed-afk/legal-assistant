@@ -45,7 +45,7 @@ export default function MessageBubble({ message }: Props) {
 </head>
 <body>
   <div style="text-align:center;margin-bottom:30px;">
-    <h1 style="border:none;margin:0;">⚖️ المستشار القانوني الذكي</h1>
+    <h1 style="border:none;margin:0;">Sanad AI — سند</h1>
     <p style="color:#666;font-size:13px;">استشارة قانونية - الأنظمة السعودية</p>
   </div>
   ${message.content.replace(/\n/g, '<br>').replace(/#{3}\s*(.+)/g, '<h3>$1</h3>').replace(/#{2}\s*(.+)/g, '<h2>$1</h2>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}

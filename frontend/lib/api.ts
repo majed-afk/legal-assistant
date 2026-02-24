@@ -20,7 +20,8 @@ interface StreamCallbacks {
 export async function askQuestionStreaming(
   question: string,
   callbacks: StreamCallbacks,
-  chatHistory?: any[]
+  chatHistory?: any[],
+  modelMode?: string
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120000); // 120s timeout
@@ -29,7 +30,7 @@ export async function askQuestionStreaming(
     const res = await fetch(`${API_BASE}/ask-stream`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ question, chat_history: chatHistory }),
+      body: JSON.stringify({ question, chat_history: chatHistory, model_mode: modelMode || '2.1' }),
       signal: controller.signal,
     });
 

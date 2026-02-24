@@ -1,5 +1,5 @@
 """
-FastAPI Backend — المستشار القانوني الذكي (أحوال شخصية + إثبات + مرافعات)
+Sanad AI — FastAPI Backend (أحوال شخصية + إثبات + مرافعات)
 """
 from __future__ import annotations
 import json
@@ -46,9 +46,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="المستشار القانوني الذكي",
-    description="مساعد قانوني ذكي متخصص في أنظمة الأحوال الشخصية والإثبات والمرافعات الشرعية السعودية",
-    version="1.0.0",
+    title="Sanad AI — سند",
+    description="مستشار قانوني ذكي متخصص في أنظمة الأحوال الشخصية والإثبات والمرافعات الشرعية السعودية",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -73,6 +73,7 @@ app.add_middleware(AuthMiddleware)
 class QuestionRequest(BaseModel):
     question: str
     chat_history: Optional[List[Dict]] = None
+    model_mode: Optional[str] = "2.1"  # "1.1" (quick) or "2.1" (detailed)
 
 class DraftRequest(BaseModel):
     draft_type: str
@@ -98,7 +99,7 @@ async def health_check():
     count = get_collection_count()
     return {
         "status": "healthy",
-        "service": "المستشار القانوني الذكي",
+        "service": "Sanad AI",
         "vector_db_count": count,
         "db_ready": _db_ready,
         "db_complete": count >= 490,
@@ -129,6 +130,7 @@ async def ask_question(req: QuestionRequest):
             context=rag_result["context"],
             classification=rag_result["classification"],
             chat_history=req.chat_history,
+            model_mode=req.model_mode or "2.1",
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -179,6 +181,7 @@ async def ask_question_stream(req: QuestionRequest):
                 context=rag_result["context"],
                 classification=rag_result["classification"],
                 chat_history=req.chat_history,
+                model_mode=req.model_mode or "2.1",
             ):
                 chunk = json.dumps({"type": "token", "text": token}, ensure_ascii=False)
                 yield f"data: {chunk}\n\n"
