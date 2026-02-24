@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="92.16" fill="#1e1b4b"/>
+
+  <!-- Gold ring accent -->
+  <circle cx="256" cy="256" r="194.56" fill="none" stroke="#d4a853" stroke-width="10.24" opacity="0.5"/>
+
+  <!-- Scales of Justice - White -->
+  <g fill="white" stroke="white" stroke-width="3.84" stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- Central pillar -->
+    <rect x="248.32" y="140.8" width="15.36" height="199.68" fill="white" stroke="none"/>
+
+    <!-- Top decorative circle -->
+    <circle cx="256" cy="140.8" r="12.8" fill="white" stroke="none"/>
+
+    <!-- Beam (horizontal bar) -->
+    <line x1="148.48000000000002" y1="202.24" x2="363.52" y2="202.24" stroke="white" stroke-width="13.824"/>
+
+    <!-- Left chain -->
+    <line x1="148.48000000000002" y1="202.24" x2="148.48000000000002" y2="271.36" stroke="white" stroke-width="7.68"/>
+
+    <!-- Right chain -->
+    <line x1="363.52" y1="202.24" x2="363.52" y2="271.36" stroke="white" stroke-width="7.68"/>
+
+    <!-- Left pan (bowl shape) -->
+    <path d="M 79.36000000000001 271.36
+             Q 107.00800000000001 340.48
+               148.48000000000002 340.48
+             Q 189.95200000000003 340.48
+               217.60000000000002 271.36
+             Z"
+          fill="white" stroke="none" opacity="0.95"/>
+
+    <!-- Left pan rim -->
+    <line x1="79.36000000000001" y1="271.36"
+          x2="217.60000000000002" y2="271.36"
+          stroke="white" stroke-width="9.216"/>
+
+    <!-- Right pan (bowl shape) -->
+    <path d="M 294.4 271.36
+             Q 322.048 340.48
+               363.52 340.48
+             Q 404.99199999999996 340.48
+               432.64 271.36
+             Z"
+          fill="white" stroke="none" opacity="0.95"/>
+
+    <!-- Right pan rim -->
+    <line x1="294.4" y1="271.36"
+          x2="432.64" y2="271.36"
+          stroke="white" stroke-width="9.216"/>
+
+    <!-- Base platform -->
+    <rect x="179.2" y="328.192" width="153.6" height="12.288" rx="3.6864" fill="white" stroke="none"/>
+
+    <!-- Base foot -->
+    <rect x="156.16" y="340.48" width="199.68" height="9.830400000000001" rx="3.6864" fill="white" stroke="none"/>
+
+  </g>
+</svg>

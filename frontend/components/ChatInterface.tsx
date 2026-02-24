@@ -12,6 +12,7 @@ import {
 } from '@/lib/supabase/conversations';
 import MessageBubble from './MessageBubble';
 import ModelSelector from './ModelSelector';
+import { motion } from 'framer-motion';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,12 +27,12 @@ interface Props {
 }
 
 const QUICK_QUESTIONS = [
-  'ما هي شروط عقد الزواج؟',
-  'كيف يتم الخلع في النظام السعودي؟',
-  'ما هي حقوق الحضانة بعد الطلاق؟',
-  'كم مدة عدة المطلقة؟',
-  'ما هي أحكام النفقة على الزوج؟',
-  'كيف يتم توزيع الميراث؟',
+  { q: 'ما هي شروط عقد الزواج؟', icon: '💍' },
+  { q: 'كيف يتم الخلع في النظام السعودي؟', icon: '⚖️' },
+  { q: 'ما هي حقوق الحضانة بعد الطلاق؟', icon: '👨‍👧' },
+  { q: 'كم مدة عدة المطلقة؟', icon: '📅' },
+  { q: 'ما هي أحكام النفقة على الزوج؟', icon: '💰' },
+  { q: 'كيف يتم توزيع الميراث؟', icon: '📜' },
 ];
 
 export default function ChatInterface({ conversationId }: Props) {
@@ -44,6 +45,7 @@ export default function ChatInterface({ conversationId }: Props) {
   const streamingContentRef = useRef('');
   const streamingMetaRef = useRef<{ sources?: any[]; classification?: any }>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -52,6 +54,15 @@ export default function ChatInterface({ conversationId }: Props) {
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  // Auto-resize textarea
+  const adjustTextarea = () => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+  };
 
   // Load existing conversation messages
   useEffect(() => {
@@ -82,82 +93,67 @@ export default function ChatInterface({ conversationId }: Props) {
     if (!q || loading) return;
 
     setInput('');
+    if (textareaRef.current) { textareaRef.current.style.height = 'auto'; }
     const userMsg: Message = { role: 'user', content: q };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
     streamingContentRef.current = '';
     streamingMetaRef.current = {};
 
-    // Create conversation if it doesn't exist
+    // Create conversation if doesn't exist
     let convId = currentConvId;
     if (!convId) {
       try {
         const conv = await createConversation(supabase, q.slice(0, 60), modelMode);
         convId = conv.id;
         setCurrentConvId(convId);
-        // Navigate to the conversation URL without full page reload
         router.replace(`/chat/${convId}`, { scroll: false });
       } catch (err) {
         console.error('Failed to create conversation:', err);
       }
     }
 
-    // Save user message to Supabase
+    // Save user message
     if (convId) {
       addMessage(supabase, convId, 'user', q).catch(() => {});
-      // Update title on first message
       if (messages.length === 0) {
         updateConversationTitle(supabase, convId, q.slice(0, 60)).catch(() => {});
       }
     }
 
     // Add empty streaming message
-    const streamingMsg: Message = {
-      role: 'assistant',
-      content: '',
-      isStreaming: true,
-    };
-    setMessages((prev) => [...prev, streamingMsg]);
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', isStreaming: true }]);
 
-    // Build chat history for API
+    // Build chat history
     const recentMessages = messages.slice(-4);
     const chatHistory = recentMessages.map((m) => ({
       role: m.role,
-      content: m.role === 'assistant'
-        ? m.content.slice(0, 500) + (m.content.length > 500 ? '...' : '')
-        : m.content,
+      content: m.role === 'assistant' ? m.content.slice(0, 500) + (m.content.length > 500 ? '...' : '') : m.content,
     }));
 
-    const savedConvId = convId; // capture for closure
+    const savedConvId = convId;
 
     await askQuestionStreaming(
       q,
       {
         onMeta: (data) => {
-          streamingMetaRef.current = {
-            sources: data.sources,
-            classification: data.classification,
-          };
+          streamingMetaRef.current = { sources: data.sources, classification: data.classification };
         },
         onToken: (text) => {
           streamingContentRef.current += text;
           setMessages((prev) => {
             const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            updated[lastIdx] = {
-              ...updated[lastIdx],
-              content: streamingContentRef.current,
-              isStreaming: true,
-            };
+            const last = updated.length - 1;
+            updated[last] = { ...updated[last], content: streamingContentRef.current, isStreaming: true };
             return updated;
           });
         },
         onDone: () => {
           setMessages((prev) => {
             const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            updated[lastIdx] = {
-              ...updated[lastIdx],
+            const last = updated.length - 1;
+            updated[last] = {
+              ...updated[last],
               content: streamingContentRef.current,
               sources: streamingMetaRef.current.sources,
               classification: streamingMetaRef.current.classification,
@@ -167,7 +163,6 @@ export default function ChatInterface({ conversationId }: Props) {
           });
           setLoading(false);
 
-          // Save assistant message to Supabase
           if (savedConvId) {
             addMessage(supabase, savedConvId, 'assistant', streamingContentRef.current, {
               sources: streamingMetaRef.current.sources,
@@ -177,29 +172,16 @@ export default function ChatInterface({ conversationId }: Props) {
           }
         },
         onError: (error) => {
-          if (streamingContentRef.current) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIdx = updated.length - 1;
-              updated[lastIdx] = {
-                ...updated[lastIdx],
-                content: streamingContentRef.current + `\n\n${error}`,
-                isStreaming: false,
-              };
-              return updated;
-            });
-          } else {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIdx = updated.length - 1;
-              updated[lastIdx] = {
-                role: 'assistant',
-                content: `${error}`,
-                isStreaming: false,
-              };
-              return updated;
-            });
-          }
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated.length - 1;
+            updated[last] = {
+              role: 'assistant',
+              content: streamingContentRef.current ? streamingContentRef.current + `\n\n${error}` : error,
+              isStreaming: false,
+            };
+            return updated;
+          });
           setLoading(false);
         },
       },
@@ -222,9 +204,9 @@ export default function ChatInterface({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen">
-      {/* Top bar with model selector */}
-      <div className="border-b border-gray-100 bg-white/60 backdrop-blur-sm px-4 py-2 flex items-center justify-between">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen bg-surface-50">
+      {/* Top bar */}
+      <div className="border-b border-gray-100/50 bg-white/70 backdrop-blur-xl px-4 py-2 flex items-center justify-between">
         <ModelSelector value={modelMode} onChange={setModelMode} disabled={loading} />
         <div className="text-xs text-gray-400">
           {messages.length > 0 && `${messages.filter(m => m.role === 'user').length} رسالة`}
@@ -235,34 +217,59 @@ export default function ChatInterface({ conversationId }: Props) {
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6">
         {messages.length === 0 ? (
           <div className="max-w-2xl mx-auto mt-8 lg:mt-16 text-center px-2">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 shadow-lg shadow-primary-500/20 mb-4">
-              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            {/* Animated logo */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-glow mb-5 animate-float ring-2 ring-gold-400/15"
+            >
+              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971z" />
               </svg>
-            </div>
-            <h2 className="text-xl lg:text-2xl font-bold text-gray-800 mb-2 font-heading">مرحباً بك في سند</h2>
-            <p className="text-sm lg:text-base text-gray-500 mb-6 lg:mb-8">
+            </motion.div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="text-2xl lg:text-3xl font-bold gradient-text mb-2 font-heading"
+            >
+              مرحباً بك في سند
+            </motion.h2>
+
+            <motion.p
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.15 }}
+              className="text-sm lg:text-base text-gray-500 mb-8"
+            >
               اسأل أي سؤال عن الأحوال الشخصية أو الإثبات أو المرافعات الشرعية
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-              {QUICK_QUESTIONS.map((q, i) => (
-                <button
+            </motion.p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+              {QUICK_QUESTIONS.map((item, i) => (
+                <motion.button
                   key={i}
-                  onClick={() => sendMessage(q)}
-                  className="text-right p-3.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-primary-50 hover:border-primary-200 hover:text-primary-700 active:bg-primary-100 transition-all hover:shadow-sm"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.2 + i * 0.05 }}
+                  onClick={() => sendMessage(item.q)}
+                  className="text-right p-4 rounded-2xl bg-white/60 backdrop-blur-sm border border-gray-200/50 text-sm text-gray-700 hover:bg-white hover:shadow-elevated hover:border-primary-200/50 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-start gap-3"
                 >
-                  {q}
-                </button>
+                  <span className="text-lg mt-0.5 opacity-60">{item.icon}</span>
+                  <span>{item.q}</span>
+                </motion.button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto space-y-3 sm:space-y-4">
+          <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
             {messages.map((msg, i) => (
               <MessageBubble key={i} message={msg} />
             ))}
             {loading && messages[messages.length - 1]?.content === '' && (
-              <div className="flex items-center gap-2 p-3 sm:p-4 animate-fade-in">
+              <div className="flex items-center gap-2 p-4 animate-fade-in">
                 <div className="loading-dot" />
                 <div className="loading-dot" />
                 <div className="loading-dot" />
@@ -274,28 +281,29 @@ export default function ChatInterface({ conversationId }: Props) {
         )}
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-gray-200 bg-white p-3 sm:p-4">
+      {/* Floating input */}
+      <div className="p-3 sm:p-4 pb-4 sm:pb-6 bg-gradient-to-t from-surface-50 via-surface-50 to-transparent">
         <div className="max-w-3xl mx-auto">
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              sendMessage();
-            }}
-            className="flex gap-2 sm:gap-3"
+            onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
+            className="input-glass flex items-end gap-2 p-2"
           >
-            <input
-              type="text"
+            <textarea
+              ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => { setInput(e.target.value); adjustTextarea(); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+              }}
               placeholder="اكتب سؤالك القانوني هنا..."
-              className="flex-1 px-3 sm:px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 focus:bg-white transition-colors"
+              className="flex-1 px-3 py-2.5 bg-transparent border-0 text-sm focus:outline-none focus:ring-0 resize-none min-h-[40px] max-h-[120px]"
+              rows={1}
               disabled={loading}
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
-              className="px-4 sm:px-6 py-3 bg-gradient-to-l from-primary-600 to-primary-700 text-white rounded-xl text-sm font-medium hover:from-primary-700 hover:to-primary-800 active:from-primary-800 active:to-primary-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+              className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white flex items-center justify-center hover:shadow-glow disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-300 flex-shrink-0"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

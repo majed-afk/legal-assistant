@@ -4,90 +4,100 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700;800&display=swap');
 
-:root {
-  --foreground: #1a1a2e;
-  --background: #f8f9fc;
-  --font-heading: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
-  --font-body: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+@layer base {
+  :root {
+    --foreground: #1e1b4b;
+    --background: #f8fafc;
+    --font-heading: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
+    --font-body: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+  }
+
+  body {
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+  }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: var(--font-body);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-glass rounded-2xl;
+  }
+
+  .glass-card-dark {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-l from-primary-400 via-primary-500 to-primary-700 bg-clip-text text-transparent;
+  }
+
+  .gradient-text-gold {
+    @apply bg-gradient-to-l from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent;
+  }
+
+  .input-glass {
+    @apply bg-white/80 backdrop-blur-lg border border-gray-200/50 shadow-elevated rounded-2xl;
+  }
+
+  .sidebar-active {
+    @apply bg-primary-500/15 text-primary-300;
+    box-shadow: inset 3px 0 0 #818cf8;
+  }
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
+@layer utilities {
+  .pattern-islamic {
+    background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M40 0L20 20L0 0h20zm0 80L20 60L0 80h20zm40-40L60 20l20-20v20zM80 80L60 60l20-20v20zM40 40l20-20 20 20-20 20z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
 }
 
-/* Touch targets for mobile */
+/* Touch targets */
 @media (max-width: 640px) {
-  button, a, input, select, textarea {
-    min-height: 44px;
-  }
+  button, a, input, select, textarea { min-height: 44px; }
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
-}
-
-/* Message animation */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fadeInUp 0.3s ease-out;
-}
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.45); }
 
 /* Loading dots */
-@keyframes pulse-dot {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
-}
-
 .loading-dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #0c87f2;
-  animation: pulse-dot 1.4s infinite ease-in-out both;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  animation: pulseDotGlow 1.4s infinite ease-in-out both;
 }
 .loading-dot:nth-child(1) { animation-delay: -0.32s; }
 .loading-dot:nth-child(2) { animation-delay: -0.16s; }
 
-/* Print-friendly styles */
+@keyframes pulseDotGlow {
+  0%, 80%, 100% { transform: scale(0); box-shadow: 0 0 0 rgba(99,102,241,0); }
+  40% { transform: scale(1); box-shadow: 0 0 10px rgba(99,102,241,0.4); }
+}
+
+/* Legacy animation class */
+.animate-fade-in { animation: fadeInUp 0.3s ease-out; }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Print */
 @media print {
-  body {
-    background: white;
-    font-family: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
-    font-size: 14pt;
-    line-height: 2;
-    color: black;
-  }
-  .no-print {
-    display: none !important;
-  }
+  body { background: white; font-family: 'Noto Naskh Arabic', serif; font-size: 14pt; line-height: 2; color: black; }
+  .no-print { display: none !important; }
 }
