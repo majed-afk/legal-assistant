@@ -22,10 +22,10 @@ from dotenv import load_dotenv
 
 # Load env
 ROOT = Path(__file__).resolve().parent.parent.parent
-load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".env", override=True)
 
 ARTICLES_PATH = ROOT / "backend" / "data" / "ahwal_clean_articles.json"
-QA_EXCEL_PATH = ROOT.parent / "Downloads" / "legal_qa_208_complete.xlsx"
+QA_EXCEL_PATH = Path.home() / "Downloads" / "legal_qa_208_complete.xlsx"
 OUTPUT_PATH = ROOT / "backend" / "data" / "corrected_qa.json"
 PROGRESS_PATH = ROOT / "backend" / "data" / "correction_progress.json"
 
