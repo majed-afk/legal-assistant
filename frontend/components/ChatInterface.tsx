@@ -169,7 +169,7 @@ export default function ChatInterface() {
                 <div className="loading-dot" />
                 <div className="loading-dot" />
                 <div className="loading-dot" />
-                <span className="text-sm text-gray-400 mr-2">جاري الاتصال...</span>
+                <span className="text-sm text-gray-400 mr-2">جاري التفكير...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
