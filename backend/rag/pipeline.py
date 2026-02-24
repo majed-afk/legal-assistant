@@ -93,6 +93,7 @@ LEGAL_TERM_MAP = {
     "الخطوبة انفكت": "الخطبة", "هدايا الخطوبة": "الخطبة",
     "رجّع الهدايا": "الخطبة", "أرجّع الهدايا": "الخطبة",
     # عقد الزواج (عامي)
+    "ابي اتزوج": "عقد الزواج", "أبي أتزوج": "عقد الزواج", "ابغى اتزوج": "عقد الزواج",
     "سن الزواج": "عقد الزواج", "عمر الزواج": "عقد الزواج",
     "الزواج تحت 18": "عقد الزواج", "زواج القاصرين": "عقد الزواج",
     "فحص قبل الزواج": "عقد الزواج", "فحص ما قبل الزواج": "عقد الزواج",
@@ -151,6 +152,8 @@ LEGAL_TERM_MAP = {
     "الحكمين": "فسخ النكاح", "حكمين": "فسخ النكاح", "حكمان": "فسخ النكاح",
     "دعوى التفريق": "فسخ النكاح", "التفريق لغياب": "فسخ النكاح",
     "زوجي مسافر": "فسخ النكاح", "في السجن": "فسخ النكاح",
+    "معلقة": "فسخ النكاح", "أنا معلقة": "فسخ النكاح",
+    "لا طلق ولا أمسك": "فسخ النكاح", "ما يطلق ولا يمسك": "فسخ النكاح",
     # العدة (عامي)
     "مدة العدة": "العدة", "العدة بعد الطلاق": "العدة",
     "أثناء العدة": "العدة", "وأنا بالعدة": "العدة",
@@ -276,6 +279,7 @@ LEGAL_TERM_MAP = {
     "قيد الدعوى": "رفع الدعوى", "دعوى": "رفع الدعوى",
     # اختصاص المحاكم
     "اختصاص نوعي": "اختصاص المحاكم", "اختصاص": "اختصاص المحاكم", "محكمة مختصة": "اختصاص المحاكم",
+    "المحكمة المختصة": "اختصاص المحاكم", "وين أرفع": "اختصاص المحاكم", "أي محكمة أروح": "اختصاص المحاكم",
     # اختصاص مكاني
     "اختصاص مكاني": "اختصاص مكاني",
     # إجراءات الجلسات
@@ -315,34 +319,53 @@ def _enrich_followup(question: str, chat_history: list | None) -> str:
     When a user asks a short follow-up like "من هي المحكمة ذات الاختصاص؟"
     after discussing custody/divorce, we combine the original topic with the
     new question so the RAG pipeline finds the right articles.
+
+    Also handles meta-questions ("هل تفهم السياق؟") and vague follow-ups
+    that lack legal keywords entirely.
     """
     if not chat_history:
         return question
 
     q = question.strip()
 
-    # Heuristic: short questions (< 40 chars) with no legal keywords
-    # are likely follow-ups that need context enrichment
+    # Detect topics from current question
     detected = _detect_topics(q)
-    if detected and len(detected) >= 2:
-        return question  # Already has enough context
 
-    # Extract topic keywords from recent user messages in chat history
+    # If already has 2+ topics, question has enough context on its own
+    if detected and len(detected) >= 2:
+        return question
+
+    # Extract topic keywords from ALL recent user messages (not just first match)
     topic_keywords = []
-    for msg in reversed(chat_history[-4:]):
+    for msg in reversed(chat_history[-6:]):
         if msg.get("role") == "user":
-            prev_topics = _detect_topics(msg.get("content", ""))
+            content = msg.get("content", "")
+            # Skip system/RAG metadata in chat history
+            if "📚 المواد النظامية" in content:
+                continue
+            prev_topics = _detect_topics(content)
             for t in prev_topics:
                 if t not in topic_keywords:
                     topic_keywords.append(t)
-            if topic_keywords:
-                break  # Use the most recent user message's topics
+        # Also check assistant responses for mentioned topics
+        elif msg.get("role") == "assistant":
+            content = msg.get("content", "")[:300]
+            prev_topics = _detect_topics(content)
+            for t in prev_topics:
+                if t not in topic_keywords:
+                    topic_keywords.append(t)
 
     if not topic_keywords:
         return question
 
-    # Build enriched query: original question + topic context
-    topic_str = " ".join(topic_keywords[:2])
+    # Merge: current detected topics + history topics (avoid duplicates)
+    all_topics = list(detected or [])
+    for t in topic_keywords:
+        if t not in all_topics:
+            all_topics.append(t)
+
+    # Build enriched query: original question + topic context (max 3 topics)
+    topic_str = " ".join(all_topics[:3])
     enriched = f"{question} ({topic_str})"
     print(f"🔗 Enriched follow-up: '{question}' → '{enriched}'")
     return enriched
@@ -421,7 +444,7 @@ LEGAL_VERB_MAP = {
     "أثبت": "إثبات - أحكام عامة", "يثبت": "إثبات - أحكام عامة",
     # النفقة
     "أنفق": "النفقة", "ينفق": "النفقة",
-    "أصرف": "نفقة الأقارب", "يصرف": "نفقة الأقارب",
+    "أصرف": "النفقة", "يصرف": "النفقة",
     # الطلاق
     "طلقني": "الطلاق", "طلقها": "الطلاق", "يطلق": "الطلاق",
     "طلّق": "الطلاق", "طلّقت": "الطلاق", "طلقت": "الطلاق",
