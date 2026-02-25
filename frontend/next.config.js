@@ -43,15 +43,19 @@ const withPWA = require('next-pwa')({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async rewrites() {
-    // In production with NEXT_PUBLIC_API_URL, no rewrites needed (direct API calls)
-    // In dev, proxy /api/* to local backend
+    // If NEXT_PUBLIC_API_URL is set, frontend calls backend directly (no rewrites)
     if (process.env.NEXT_PUBLIC_API_URL) {
       return [];
     }
+    // In production (Vercel), proxy /api/* to Render backend
+    // In dev, proxy /api/* to local backend
+    const backendUrl = process.env.NODE_ENV === 'production'
+      ? 'https://legal-assistant-55zm.onrender.com'
+      : 'http://127.0.0.1:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ];
   },
