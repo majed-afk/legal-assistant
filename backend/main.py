@@ -1,5 +1,5 @@
 """
-Sanad AI — FastAPI Backend (أحوال شخصية + إثبات + مرافعات)
+Sanad AI — FastAPI Backend (أحوال شخصية + معاملات مدنية + إثبات + مرافعات)
 """
 from __future__ import annotations
 import json
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Sanad AI — سند",
-    description="مستشار قانوني ذكي متخصص في أنظمة الأحوال الشخصية والإثبات والمرافعات الشرعية السعودية",
+    description="مستشار قانوني ذكي متخصص في أنظمة الأحوال الشخصية والمعاملات المدنية والإثبات والمرافعات الشرعية السعودية",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -102,8 +102,8 @@ async def health_check():
         "service": "Sanad AI",
         "vector_db_count": count,
         "db_ready": _db_ready,
-        "db_complete": count >= 490,
-        "laws": ["أحوال شخصية", "إثبات", "مرافعات شرعية"],
+        "db_complete": count >= 1200,
+        "laws": ["أحوال شخصية", "معاملات مدنية", "إثبات", "مرافعات شرعية"],
     }
 
 
