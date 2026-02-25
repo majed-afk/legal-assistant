@@ -80,13 +80,18 @@ CREATE POLICY "Users can delete messages from own conversations"
 -- ============================================
 -- Phase 1: Feedback + Analytics Tables
 -- ============================================
+-- NOTE: These tables are written by the backend using Supabase anon key
+-- (without user JWT), so RLS policies must allow anonymous inserts.
+-- No FK constraints on message_id/conversation_id because the backend
+-- sends UUIDs that may not exist in the messages/conversations tables
+-- (e.g., anonymous users or edge cases).
 
 -- 5. Message feedback (thumbs up/down on AI responses)
 CREATE TABLE message_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID,
+  message_id UUID NOT NULL,
+  conversation_id UUID NOT NULL,
   rating TEXT NOT NULL CHECK (rating IN ('positive', 'negative')),
   feedback_type TEXT CHECK (feedback_type IN (
     'accurate', 'helpful', 'clear',
@@ -104,12 +109,12 @@ CREATE INDEX idx_message_feedback_created ON message_feedback(created_at DESC);
 
 ALTER TABLE message_feedback ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can view own feedback"
-  ON message_feedback FOR SELECT USING (auth.uid() IS NOT NULL);
-CREATE POLICY "Users can insert feedback"
-  ON message_feedback FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
-CREATE POLICY "Users can update own feedback"
-  ON message_feedback FOR UPDATE USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Anyone can insert feedback"
+  ON message_feedback FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can update feedback"
+  ON message_feedback FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Anyone can view feedback"
+  ON message_feedback FOR SELECT USING (true);
 
 -- 6. Knowledge gaps (questions with no good answer)
 CREATE TABLE knowledge_gaps (
@@ -118,20 +123,22 @@ CREATE TABLE knowledge_gaps (
   classification JSONB,
   detected_topics TEXT[],
   rag_results_count INTEGER DEFAULT 0,
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id UUID,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE INDEX idx_knowledge_gaps_created ON knowledge_gaps(created_at DESC);
 
 ALTER TABLE knowledge_gaps ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated users can insert gaps"
-  ON knowledge_gaps FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "Anyone can insert gaps"
+  ON knowledge_gaps FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can view gaps"
+  ON knowledge_gaps FOR SELECT USING (true);
 
 -- 7. Analytics events (lightweight event tracking)
 CREATE TABLE analytics_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id UUID,
   event_type TEXT NOT NULL,
   event_data JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT now()
@@ -142,8 +149,10 @@ CREATE INDEX idx_analytics_events_created ON analytics_events(created_at DESC);
 CREATE INDEX idx_analytics_events_user ON analytics_events(user_id);
 
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated users can insert events"
-  ON analytics_events FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "Anyone can insert events"
+  ON analytics_events FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can view events"
+  ON analytics_events FOR SELECT USING (true);
 
 -- 8. Daily question topic frequency
 CREATE TABLE question_topics_daily (
@@ -159,3 +168,11 @@ CREATE TABLE question_topics_daily (
 );
 
 CREATE INDEX idx_question_topics_date ON question_topics_daily(date DESC);
+
+ALTER TABLE question_topics_daily ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can insert topics"
+  ON question_topics_daily FOR INSERT WITH CHECK (true);
+CREATE POLICY "Anyone can update topics"
+  ON question_topics_daily FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Anyone can view topics"
+  ON question_topics_daily FOR SELECT USING (true);
