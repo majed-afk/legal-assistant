@@ -89,6 +89,17 @@ class SearchRequest(BaseModel):
     topic: Optional[str] = None
     top_k: int = 10
 
+class FeedbackRequest(BaseModel):
+    message_id: str
+    conversation_id: str
+    rating: str  # 'positive' or 'negative'
+    feedback_type: Optional[str] = None
+    correction_text: Optional[str] = None
+
+class AnalyticsEventRequest(BaseModel):
+    event_type: str
+    event_data: Optional[Dict] = None
+
 
 # --- Endpoints ---
 
@@ -371,3 +382,61 @@ async def get_deadline_types():
             {"type": "appeal", "name": "استئناف", "description": "حساب مهل الاستئناف والنقض"},
         ]
     }
+
+
+# --- Feedback & Analytics Endpoints ---
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    """Submit feedback (thumbs up/down) on an AI response."""
+    from backend.db import get_supabase
+
+    if req.rating not in ("positive", "negative"):
+        raise HTTPException(status_code=400, detail="التقييم يجب أن يكون positive أو negative")
+
+    valid_types = {
+        "accurate", "helpful", "clear",
+        "inaccurate", "unhelpful", "incomplete",
+        "wrong_article", "missing_info", "other",
+    }
+    if req.feedback_type and req.feedback_type not in valid_types:
+        raise HTTPException(status_code=400, detail="نوع التقييم غير صالح")
+
+    sb = get_supabase()
+    if not sb:
+        raise HTTPException(status_code=503, detail="خدمة التقييم غير متوفرة حالياً")
+
+    try:
+        result = sb.table("message_feedback").upsert({
+            "message_id": req.message_id,
+            "conversation_id": req.conversation_id,
+            "user_id": req.message_id[:8],  # placeholder — will use JWT in Phase 2
+            "rating": req.rating,
+            "feedback_type": req.feedback_type,
+            "correction_text": req.correction_text,
+        }, on_conflict="user_id,message_id").execute()
+
+        return {"status": "ok", "message": "تم تسجيل التقييم بنجاح"}
+    except Exception as e:
+        print(f"Feedback error: {e}")
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء تسجيل التقييم")
+
+
+@app.post("/api/analytics/event")
+async def log_analytics_event(req: AnalyticsEventRequest):
+    """Log an analytics event (fire-and-forget)."""
+    from backend.db import get_supabase
+
+    sb = get_supabase()
+    if not sb:
+        return {"status": "skipped"}  # Silently skip if Supabase not configured
+
+    try:
+        sb.table("analytics_events").insert({
+            "event_type": req.event_type,
+            "event_data": req.event_data or {},
+        }).execute()
+        return {"status": "ok"}
+    except Exception as e:
+        print(f"Analytics event error: {e}")
+        return {"status": "error"}  # Don't fail the request for analytics

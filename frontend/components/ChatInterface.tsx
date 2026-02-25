@@ -13,8 +13,10 @@ import {
 import MessageBubble from './MessageBubble';
 import ModelSelector from './ModelSelector';
 import { motion } from 'framer-motion';
+import { trackEvent, EVENTS } from '@/lib/analytics';
 
 interface Message {
+  id?: string;
   role: 'user' | 'assistant';
   content: string;
   sources?: any[];
@@ -73,6 +75,7 @@ export default function ChatInterface({ conversationId }: Props) {
         .then((msgs) => {
           setMessages(
             msgs.map((m) => ({
+              id: m.id,
               role: m.role,
               content: m.content,
               sources: m.sources,
@@ -131,6 +134,14 @@ export default function ChatInterface({ conversationId }: Props) {
       content: m.role === 'assistant' ? m.content.slice(0, 500) + (m.content.length > 500 ? '...' : '') : m.content,
     }));
 
+    // Track analytics event
+    trackEvent(EVENTS.QUESTION_ASKED, {
+      question_length: q.length,
+      model_mode: modelMode,
+      conversation_id: convId,
+      has_history: chatHistory.length > 0,
+    });
+
     const savedConvId = convId;
 
     await askQuestionStreaming(
@@ -168,6 +179,14 @@ export default function ChatInterface({ conversationId }: Props) {
               sources: streamingMetaRef.current.sources,
               classification: streamingMetaRef.current.classification,
               model_mode: modelMode,
+            }).then((savedMsg) => {
+              // Update the message with its Supabase ID for feedback tracking
+              setMessages((prev) => {
+                const updated = [...prev];
+                const last = updated.length - 1;
+                updated[last] = { ...updated[last], id: savedMsg.id };
+                return updated;
+              });
             }).catch(() => {});
           }
         },
@@ -266,7 +285,7 @@ export default function ChatInterface({ conversationId }: Props) {
         ) : (
           <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
             {messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
+              <MessageBubble key={msg.id || i} message={msg} conversationId={currentConvId || undefined} />
             ))}
             {loading && messages[messages.length - 1]?.content === '' && (
               <div className="flex items-center gap-2 p-4 animate-fade-in">

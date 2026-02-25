@@ -7,3 +7,4 @@ sentence-transformers>=2.2.0
 PyPDF2==3.0.1
 python-dotenv==1.0.1
 pydantic==2.10.3
+supabase>=2.0.0

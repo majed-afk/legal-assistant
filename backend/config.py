@@ -15,3 +15,8 @@ PDF_REGULATIONS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 
 API_KEY = os.getenv("API_KEY", "")  # Required API key for protected endpoints
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
 RATE_LIMIT_PER_DAY = int(os.getenv("RATE_LIMIT_PER_DAY", "100"))
+
+# Supabase (for feedback, analytics, subscriptions)
+SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""))
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", ""))
