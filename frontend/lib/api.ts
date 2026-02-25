@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://legal-assistant-55zm.onrender.com/api';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 /** Common headers for all API requests (includes API key if configured). */
