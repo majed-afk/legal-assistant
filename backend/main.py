@@ -410,11 +410,10 @@ async def submit_feedback(req: FeedbackRequest):
         result = sb.table("message_feedback").upsert({
             "message_id": req.message_id,
             "conversation_id": req.conversation_id,
-            "user_id": req.message_id[:8],  # placeholder — will use JWT in Phase 2
             "rating": req.rating,
             "feedback_type": req.feedback_type,
             "correction_text": req.correction_text,
-        }, on_conflict="user_id,message_id").execute()
+        }, on_conflict="message_id").execute()
 
         return {"status": "ok", "message": "تم تسجيل التقييم بنجاح"}
     except Exception as e:

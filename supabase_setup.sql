@@ -84,7 +84,7 @@ CREATE POLICY "Users can delete messages from own conversations"
 -- 5. Message feedback (thumbs up/down on AI responses)
 CREATE TABLE message_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   rating TEXT NOT NULL CHECK (rating IN ('positive', 'negative')),
@@ -95,7 +95,7 @@ CREATE TABLE message_feedback (
   )),
   correction_text TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, message_id)
+  UNIQUE(message_id)
 );
 
 CREATE INDEX idx_message_feedback_message ON message_feedback(message_id);
@@ -105,11 +105,11 @@ CREATE INDEX idx_message_feedback_created ON message_feedback(created_at DESC);
 ALTER TABLE message_feedback ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own feedback"
-  ON message_feedback FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own feedback"
-  ON message_feedback FOR INSERT WITH CHECK (auth.uid() = user_id);
+  ON message_feedback FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "Users can insert feedback"
+  ON message_feedback FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 CREATE POLICY "Users can update own feedback"
-  ON message_feedback FOR UPDATE USING (auth.uid() = user_id);
+  ON message_feedback FOR UPDATE USING (auth.uid() IS NOT NULL);
 
 -- 6. Knowledge gaps (questions with no good answer)
 CREATE TABLE knowledge_gaps (
