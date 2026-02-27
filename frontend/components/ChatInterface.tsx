@@ -44,7 +44,7 @@ export default function ChatInterface({ conversationId }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [modelMode, setModelMode] = useState('2.1');
+  const [modelMode, setModelMode] = useState('1.1');
   const [currentConvId, setCurrentConvId] = useState<string | null>(conversationId || null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -58,7 +58,16 @@ export default function ChatInterface({ conversationId }: Props) {
   const pendingRetryRef = useRef<{ question: string; skipUserMessage: boolean } | null>(null);
   const router = useRouter();
   const supabase = createClient();
-  const { canPerformAction, refreshUsage } = useSubscription();
+  const { canPerformAction, refreshUsage, isModelModeAllowed } = useSubscription();
+
+  // Auto-select best available model mode based on subscription
+  useEffect(() => {
+    if (isModelModeAllowed('2.1')) {
+      setModelMode('2.1');
+    } else {
+      setModelMode('1.1');
+    }
+  }, [isModelModeAllowed]);
 
   // Smart scroll — only auto-scroll if user hasn't scrolled up
   const scrollToBottom = useCallback(() => {
