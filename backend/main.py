@@ -54,7 +54,12 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001").split(",")
 
-# Security middleware (order matters: CORS first, then auth, then rate limit)
+# Security middleware
+# Order matters: last added = outermost (processes request first)
+# CORS must be outermost so it adds headers even on 401/403 responses from JWT middleware
+from backend.middleware import JWTAuthMiddleware
+app.add_middleware(JWTAuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -62,9 +67,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-from backend.middleware import JWTAuthMiddleware
-app.add_middleware(JWTAuthMiddleware)
 
 
 # --- Request / Response Models ---
