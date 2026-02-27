@@ -13,13 +13,18 @@ interface Props {
     sources?: any[];
     classification?: any;
     isStreaming?: boolean;
+    isError?: boolean;
   };
   conversationId?: string;
+  isLastAssistant?: boolean;
+  onRetry?: () => void;
+  onRegenerate?: () => void;
 }
 
-export default function MessageBubble({ message, conversationId }: Props) {
+export default function MessageBubble({ message, conversationId, isLastAssistant, onRetry, onRegenerate }: Props) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [codeCopied, setCodeCopied] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
   const [feedbackSent, setFeedbackSent] = useState(false);
 
@@ -39,14 +44,12 @@ export default function MessageBubble({ message, conversationId }: Props) {
           rating,
         }),
       });
-      // Track feedback analytics
       trackEvent(EVENTS.FEEDBACK_GIVEN, {
         rating,
         message_id: message.id,
         conversation_id: conversationId,
       });
     } catch (e) {
-      // Don't block UI for feedback errors
       console.warn('Feedback error:', e);
     }
   };
@@ -55,6 +58,12 @@ export default function MessageBubble({ message, conversationId }: Props) {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCodeCopied(code);
+    setTimeout(() => setCodeCopied(null), 2000);
   };
 
   const handlePrint = () => {
@@ -74,6 +83,9 @@ export default function MessageBubble({ message, conversationId }: Props) {
     ul, ol { padding-right: 20px; }
     li { margin-bottom: 4px; }
     blockquote { border-right: 4px solid #c49a38; padding-right: 16px; margin: 12px 0; color: #555; background: #fffbf0; padding: 8px 16px; border-radius: 0 8px 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid #e0e7ff; padding: 8px 12px; text-align: right; }
+    th { background: #f5f3ff; font-weight: 600; }
     .header { text-align: center; margin-bottom: 30px; padding-bottom: 16px; border-bottom: 2px solid #4338ca; }
     .header h1 { border: none; margin: 0; color: #4338ca; }
     .header p { color: #666; font-size: 13px; margin-top: 4px; }
@@ -107,7 +119,9 @@ export default function MessageBubble({ message, conversationId }: Props) {
         className={`group relative max-w-full rounded-2xl p-3.5 sm:p-4 transition-shadow duration-300 ${
           isUser
             ? 'bg-gradient-to-l from-primary-500 to-primary-600 text-white max-w-[90%] sm:max-w-[80%] shadow-md'
-            : 'bg-white/80 backdrop-blur-sm border border-gray-100/80 shadow-sm hover:shadow-elevated border-r-[3px] border-r-primary-400'
+            : message.isError
+              ? 'bg-red-50/80 backdrop-blur-sm border border-red-200/80 shadow-sm border-r-[3px] border-r-red-400'
+              : 'bg-white/80 backdrop-blur-sm border border-gray-100/80 shadow-sm hover:shadow-elevated border-r-[3px] border-r-primary-400'
         }`}
       >
         {isUser ? (
@@ -115,7 +129,7 @@ export default function MessageBubble({ message, conversationId }: Props) {
         ) : (
           <>
             {/* Copy & Print - appear on hover */}
-            {!message.isStreaming && (
+            {!message.isStreaming && !message.isError && (
               <div className="absolute top-2.5 left-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 no-print">
                 <button
                   onClick={handleCopy}
@@ -176,7 +190,7 @@ export default function MessageBubble({ message, conversationId }: Props) {
               </div>
             )}
 
-            <div className="prose prose-sm max-w-none text-gray-800 leading-relaxed font-legal">
+            <div className={`prose prose-sm max-w-none leading-relaxed font-legal ${message.isError ? 'text-red-700' : 'text-gray-800'}`}>
               <ReactMarkdown
                 components={{
                   h2: ({ children }) => (
@@ -206,6 +220,61 @@ export default function MessageBubble({ message, conversationId }: Props) {
                       {children}
                     </blockquote>
                   ),
+                  code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const codeString = String(children).replace(/\n$/, '');
+                    const isInline = !match && !codeString.includes('\n');
+
+                    if (isInline) {
+                      return (
+                        <code className="px-1.5 py-0.5 bg-primary-50 text-primary-700 rounded text-xs font-mono" {...props}>
+                          {children}
+                        </code>
+                      );
+                    }
+
+                    return (
+                      <div className="relative group/code my-3 rounded-xl overflow-hidden border border-gray-200/50">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200/50">
+                          <span className="text-[10px] text-gray-400 font-mono">{match?.[1] || 'code'}</span>
+                          <button
+                            onClick={() => handleCopyCode(codeString)}
+                            className="text-[10px] text-gray-400 hover:text-primary-600 transition-colors"
+                          >
+                            {codeCopied === codeString ? 'تم النسخ' : 'نسخ'}
+                          </button>
+                        </div>
+                        <pre className="p-3 overflow-x-auto bg-gray-50/50 text-xs leading-relaxed" dir="ltr">
+                          <code className="font-mono text-gray-800" {...props}>
+                            {children}
+                          </code>
+                        </pre>
+                      </div>
+                    );
+                  },
+                  table: ({ children }) => (
+                    <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/50">
+                      <table className="w-full text-sm border-collapse">
+                        {children}
+                      </table>
+                    </div>
+                  ),
+                  thead: ({ children }) => (
+                    <thead className="bg-primary-50/50">{children}</thead>
+                  ),
+                  th: ({ children }) => (
+                    <th className="px-3 py-2 text-right font-semibold text-primary-700 border-b border-gray-200/50 text-xs">
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children }) => (
+                    <td className="px-3 py-2 text-right border-b border-gray-100/50 text-xs text-gray-700">
+                      {children}
+                    </td>
+                  ),
+                  tr: ({ children }) => (
+                    <tr className="hover:bg-gray-50/50 transition-colors">{children}</tr>
+                  ),
                 }}
               >
                 {message.content}
@@ -214,6 +283,36 @@ export default function MessageBubble({ message, conversationId }: Props) {
                 <span className="inline-block w-1.5 h-5 rounded-full bg-gradient-to-b from-primary-400 to-primary-600 animate-pulse mr-1 align-text-bottom shadow-glow" />
               )}
             </div>
+
+            {/* Error retry button */}
+            {message.isError && onRetry && (
+              <div className="mt-3 pt-3 border-t border-red-100/80">
+                <button
+                  onClick={onRetry}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100/50 rounded-lg transition-all"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  أعد المحاولة
+                </button>
+              </div>
+            )}
+
+            {/* Regenerate button */}
+            {onRegenerate && !message.isError && (
+              <div className="mt-3 pt-3 border-t border-gray-100/80">
+                <button
+                  onClick={onRegenerate}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  أعد التوليد
+                </button>
+              </div>
+            )}
           </>
         )}
 

@@ -37,9 +37,10 @@ export async function askQuestionStreaming(
   question: string,
   callbacks: StreamCallbacks,
   chatHistory?: any[],
-  modelMode?: string
+  modelMode?: string,
+  abortController?: AbortController
 ) {
-  const controller = new AbortController();
+  const controller = abortController || new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120000); // 120s timeout
 
   try {
@@ -52,6 +53,9 @@ export async function askQuestionStreaming(
     });
 
     if (!res.ok) {
+      if (res.status === 401) throw new Error('انتهت الجلسة — سجّل دخولك مرة أخرى');
+      if (res.status === 429) throw new Error('تجاوزت الحد المسموح — يرجى الترقية أو الانتظار');
+      if (res.status === 503) throw new Error('الخادم في صيانة — جرب مرة أخرى بعد قليل');
       const err = await res.json().catch(() => ({ detail: 'خطأ في الاتصال' }));
       throw new Error(err.detail || 'حدث خطأ');
     }
@@ -106,6 +110,8 @@ export async function askQuestionStreaming(
   } catch (e: any) {
     if (e.name === 'AbortError') {
       callbacks.onError('انتهت المهلة — جرب مرة أخرى');
+    } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      callbacks.onError('لا يوجد اتصال بالإنترنت — تحقق من شبكتك');
     } else {
       callbacks.onError(e.message || 'حدث خطأ في الاتصال');
     }
