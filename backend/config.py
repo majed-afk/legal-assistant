@@ -20,3 +20,9 @@ RATE_LIMIT_PER_DAY = int(os.getenv("RATE_LIMIT_PER_DAY", "100"))
 SUPABASE_URL = os.getenv("SUPABASE_URL", os.getenv("NEXT_PUBLIC_SUPABASE_URL", ""))
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY", ""))
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+
+# Moyasar Payment Gateway
+MOYASAR_SECRET_KEY = os.getenv("MOYASAR_SECRET_KEY", "")
+MOYASAR_PUBLISHABLE_KEY = os.getenv("MOYASAR_PUBLISHABLE_KEY", "")
+MOYASAR_CALLBACK_URL = os.getenv("MOYASAR_CALLBACK_URL", "https://sanad.audience.sa/subscription/callback")

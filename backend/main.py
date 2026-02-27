@@ -6,7 +6,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -63,9 +63,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from backend.middleware import AuthMiddleware, RateLimitMiddleware
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(AuthMiddleware)
+from backend.middleware import JWTAuthMiddleware
+app.add_middleware(JWTAuthMiddleware)
 
 
 # --- Request / Response Models ---
@@ -100,6 +99,17 @@ class AnalyticsEventRequest(BaseModel):
     event_type: str
     event_data: Optional[Dict] = None
 
+class SubscriptionCreateRequest(BaseModel):
+    plan_tier: str
+    billing_cycle: str = "monthly"
+
+
+# --- Helper: get user_id from request ---
+
+def _get_user_id(request) -> Optional[str]:
+    """Extract user_id from request state (set by JWTAuthMiddleware)."""
+    return getattr(request.state, "user_id", None)
+
 
 # --- Endpoints ---
 
@@ -119,7 +129,7 @@ async def health_check():
 
 
 @app.post("/api/ask")
-async def ask_question(req: QuestionRequest):
+async def ask_question(req: QuestionRequest, request: Request):
     """Legal consultation endpoint."""
     from backend.rag.pipeline import retrieve_context
     from backend.services.legal_assistant import generate_legal_response
@@ -132,6 +142,17 @@ async def ask_question(req: QuestionRequest):
             status_code=503,
             detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
         )
+
+    # Check subscription limits
+    user_id = _get_user_id(request)
+    if user_id:
+        from backend.services.subscription import check_limit, check_model_mode, increment_usage
+        allowed, msg = await check_limit(user_id, "questions")
+        if not allowed:
+            raise HTTPException(status_code=429, detail=msg)
+        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "2.1")
+        if not mode_ok:
+            raise HTTPException(status_code=403, detail=mode_msg)
 
     rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
@@ -150,6 +171,10 @@ async def ask_question(req: QuestionRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ Claude API: {str(e)}")
 
+    # Increment usage after success
+    if user_id:
+        await increment_usage(user_id, "questions")
+
     return {
         "answer": answer,
         "classification": rag_result["classification"],
@@ -159,7 +184,7 @@ async def ask_question(req: QuestionRequest):
 
 
 @app.post("/api/ask-stream")
-async def ask_question_stream(req: QuestionRequest):
+async def ask_question_stream(req: QuestionRequest, request: Request):
     """Legal consultation endpoint with SSE streaming."""
     from backend.rag.pipeline import retrieve_context
     from backend.services.legal_assistant import stream_legal_response
@@ -172,6 +197,19 @@ async def ask_question_stream(req: QuestionRequest):
             status_code=503,
             detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة"
         )
+
+    # Check subscription limits before streaming
+    user_id = _get_user_id(request)
+    if user_id:
+        from backend.services.subscription import check_limit, check_model_mode, increment_usage
+        allowed, msg = await check_limit(user_id, "questions")
+        if not allowed:
+            raise HTTPException(status_code=429, detail=msg)
+        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "2.1")
+        if not mode_ok:
+            raise HTTPException(status_code=403, detail=mode_msg)
+        # Increment usage before streaming (can't do it after for StreamingResponse)
+        await increment_usage(user_id, "questions")
 
     rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
@@ -323,11 +361,19 @@ async def get_topics():
 
 
 @app.post("/api/draft")
-async def draft_document(req: DraftRequest):
+async def draft_document(req: DraftRequest, request: Request):
     """Draft a legal document."""
     from backend.services.document_drafter import validate_draft_request, build_drafting_prompt, get_draft_types
     from backend.rag.pipeline import retrieve_context
     from backend.services.legal_assistant import generate_draft
+
+    # Check subscription limits
+    user_id = _get_user_id(request)
+    if user_id:
+        from backend.services.subscription import check_limit, increment_usage
+        allowed, msg = await check_limit(user_id, "drafts")
+        if not allowed:
+            raise HTTPException(status_code=429, detail=msg)
 
     valid, error = validate_draft_request(req.draft_type, req.case_details)
     if not valid:
@@ -345,6 +391,10 @@ async def draft_document(req: DraftRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"خطأ في صياغة المذكرة: {str(e)}")
 
+    # Increment usage after success
+    if user_id:
+        await increment_usage(user_id, "drafts")
+
     return {
         "draft": draft,
         "draft_type": req.draft_type,
@@ -360,13 +410,26 @@ async def get_draft_types_endpoint():
 
 
 @app.post("/api/deadline")
-async def calculate_deadline(req: DeadlineRequest):
+async def calculate_deadline(req: DeadlineRequest, request: Request):
     """Calculate legal deadlines."""
     from backend.services.deadline_calculator import calculate_deadline as calc
+
+    # Check subscription limits
+    user_id = _get_user_id(request)
+    if user_id:
+        from backend.services.subscription import check_limit, increment_usage
+        allowed, msg = await check_limit(user_id, "deadlines")
+        if not allowed:
+            raise HTTPException(status_code=429, detail=msg)
 
     result = calc(req.event_type, req.event_date, req.details)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
+
+    # Increment usage after success
+    if user_id:
+        await increment_usage(user_id, "deadlines")
+
     return result
 
 
@@ -439,3 +502,107 @@ async def log_analytics_event(req: AnalyticsEventRequest):
     except Exception as e:
         print(f"Analytics event error: {e}")
         return {"status": "error"}  # Don't fail the request for analytics
+
+
+# --- Subscription & Payment Endpoints ---
+
+@app.get("/api/plans")
+async def get_plans():
+    """Get all available subscription plans (public endpoint)."""
+    from backend.services.subscription import get_all_plans
+    plans = await get_all_plans()
+    return {"plans": plans}
+
+
+@app.get("/api/subscription")
+async def get_subscription(request: Request):
+    """Get current user's subscription details."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.subscription import get_user_subscription
+    sub = await get_user_subscription(user_id)
+    return sub
+
+
+@app.post("/api/subscription/create")
+async def create_subscription(req: SubscriptionCreateRequest, request: Request):
+    """Create a subscription payment via Moyasar."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.payment import create_payment_form_data
+
+    try:
+        result = await create_payment_form_data(
+            user_id=user_id,
+            plan_tier=req.plan_tier,
+            billing_cycle=req.billing_cycle,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء إنشاء عملية الدفع")
+
+
+@app.get("/api/subscription/verify")
+async def verify_subscription_payment(payment_id: str, tx_id: Optional[str] = None):
+    """Verify a payment after 3DS redirect."""
+    from backend.services.payment import verify_payment
+
+    try:
+        result = await verify_payment(payment_id, tx_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء التحقق من الدفع")
+
+
+@app.post("/api/subscription/cancel")
+async def cancel_sub(request: Request):
+    """Cancel user's active subscription at end of period."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.payment import cancel_subscription
+
+    try:
+        result = await cancel_subscription(user_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/subscription/webhook")
+async def subscription_webhook(request: Request):
+    """Moyasar webhook callback (public — no auth required)."""
+    from backend.services.payment import handle_webhook
+
+    try:
+        payload = await request.json()
+        result = await handle_webhook(payload)
+        return result
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return {"status": "error"}
+
+
+@app.get("/api/usage")
+async def get_usage(request: Request):
+    """Get current user's usage summary."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.subscription import get_user_usage_summary
+    summary = await get_user_usage_summary(user_id)
+    return summary

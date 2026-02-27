@@ -12,8 +12,10 @@ import {
 } from '@/lib/supabase/conversations';
 import MessageBubble from './MessageBubble';
 import ModelSelector from './ModelSelector';
+import UsageLimitBanner from './UsageLimitBanner';
 import { motion } from 'framer-motion';
 import { trackEvent, EVENTS } from '@/lib/analytics';
+import { useSubscription } from '@/lib/supabase/subscription-context';
 
 interface Message {
   id?: string;
@@ -50,6 +52,7 @@ export default function ChatInterface({ conversationId }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const supabase = createClient();
+  const { canPerformAction, refreshUsage } = useSubscription();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -299,6 +302,9 @@ export default function ChatInterface({ conversationId }: Props) {
           </div>
         )}
       </div>
+
+      {/* Usage limit banner */}
+      <UsageLimitBanner action="questions" />
 
       {/* Floating input */}
       <div className="p-3 sm:p-4 pb-4 sm:pb-6 bg-gradient-to-t from-surface-50 via-surface-50 to-transparent">
