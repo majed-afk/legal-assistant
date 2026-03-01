@@ -5,9 +5,12 @@ Supports two model modes: 1.1 (quick) and 2.1 (detailed).
 """
 from __future__ import annotations
 import json
+import logging
 import time
 from typing import Generator, Optional
 import anthropic
+
+log = logging.getLogger("sanad.legal_assistant")
 from backend.config import ANTHROPIC_API_KEY, CLAUDE_MODEL
 
 
@@ -19,14 +22,14 @@ def _call_claude_with_retry(client, max_retries=3, **kwargs):
         except anthropic.RateLimitError as e:
             if attempt < max_retries - 1:
                 wait = 2 ** attempt * 5  # 5s, 10s, 20s
-                print(f"⏳ Rate limit hit, waiting {wait}s... (attempt {attempt + 1}/{max_retries})")
+                log.warning("Rate limit hit, waiting %ds... (attempt %d/%d)", wait, attempt + 1, max_retries)
                 time.sleep(wait)
             else:
                 raise
         except anthropic.APIStatusError as e:
             if e.status_code == 529 and attempt < max_retries - 1:
                 wait = 2 ** attempt * 5
-                print(f"⏳ API overloaded, waiting {wait}s... (attempt {attempt + 1}/{max_retries})")
+                log.warning("API overloaded, waiting %ds... (attempt %d/%d)", wait, attempt + 1, max_retries)
                 time.sleep(wait)
             else:
                 raise

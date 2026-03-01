@@ -5,8 +5,11 @@ Article Lookup — استخراج نص مادة نظامية مباشرة بدو
 """
 from __future__ import annotations
 import json
+import logging
 import os
 import re
+
+log = logging.getLogger("sanad.article_lookup")
 
 _articles_data: list[dict] = []
 
@@ -64,7 +67,7 @@ def initialize_article_lookup():
         with open(ARTICLES_JSON_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
         _articles_data = data.get('articles', [])
-        print(f"✅ استعلام المواد جاهز — {len(_articles_data)} مادة محملة")
+        log.info("Article lookup ready — %d articles loaded", len(_articles_data))
 
 
 def _to_western_digits(s: str) -> str:

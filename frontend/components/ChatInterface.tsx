@@ -353,7 +353,7 @@ export default function ChatInterface({ conversationId }: Props) {
 
   if (loadingHistory) {
     return (
-      <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen items-center justify-center bg-surface-50">
+      <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen items-center justify-center bg-surface-50 dark:bg-surface-900">
         <div className="w-full max-w-3xl px-4 space-y-4">
           {/* User message skeleton */}
           <div className="flex justify-start">
@@ -361,19 +361,19 @@ export default function ChatInterface({ conversationId }: Props) {
           </div>
           {/* Assistant message skeleton */}
           <div className="w-full space-y-2">
-            <div className="h-4 w-3/4 rounded-lg bg-gray-200/60 animate-pulse" />
-            <div className="h-4 w-full rounded-lg bg-gray-200/40 animate-pulse" />
-            <div className="h-4 w-5/6 rounded-lg bg-gray-200/50 animate-pulse" />
-            <div className="h-4 w-2/3 rounded-lg bg-gray-200/30 animate-pulse" />
+            <div className="h-4 w-3/4 rounded-lg bg-gray-200/60 dark:bg-surface-800/60 animate-pulse" />
+            <div className="h-4 w-full rounded-lg bg-gray-200/40 dark:bg-surface-800/40 animate-pulse" />
+            <div className="h-4 w-5/6 rounded-lg bg-gray-200/50 dark:bg-surface-800/50 animate-pulse" />
+            <div className="h-4 w-2/3 rounded-lg bg-gray-200/30 dark:bg-surface-800/30 animate-pulse" />
           </div>
           {/* Second pair */}
           <div className="flex justify-start mt-6">
             <div className="w-[45%] h-10 rounded-2xl bg-gradient-to-l from-primary-500/15 to-primary-600/5 animate-pulse" />
           </div>
           <div className="w-full space-y-2">
-            <div className="h-4 w-2/3 rounded-lg bg-gray-200/60 animate-pulse" />
-            <div className="h-4 w-full rounded-lg bg-gray-200/40 animate-pulse" />
-            <div className="h-4 w-4/5 rounded-lg bg-gray-200/50 animate-pulse" />
+            <div className="h-4 w-2/3 rounded-lg bg-gray-200/60 dark:bg-surface-800/60 animate-pulse" />
+            <div className="h-4 w-full rounded-lg bg-gray-200/40 dark:bg-surface-800/40 animate-pulse" />
+            <div className="h-4 w-4/5 rounded-lg bg-gray-200/50 dark:bg-surface-800/50 animate-pulse" />
           </div>
         </div>
       </div>
@@ -381,11 +381,11 @@ export default function ChatInterface({ conversationId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen bg-surface-50">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen bg-surface-50 dark:bg-surface-900 transition-colors duration-300">
       {/* Top bar */}
-      <div className="border-b border-gray-100/50 bg-white/70 backdrop-blur-xl px-4 py-2 flex items-center justify-between">
+      <div className="border-b border-gray-100/50 dark:border-white/10 bg-white/70 dark:bg-surface-800/70 backdrop-blur-xl px-4 py-2 flex items-center justify-between">
         <ModelSelector value={modelMode} onChange={setModelMode} disabled={loading} />
-        <div className="text-xs text-gray-400">
+        <div className="text-xs text-gray-400 dark:text-gray-500">
           {messages.length > 0 && `${messages.filter(m => m.role === 'user').length} رسالة`}
         </div>
       </div>
@@ -423,7 +423,7 @@ export default function ChatInterface({ conversationId }: Props) {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.15 }}
-              className="text-sm lg:text-base text-gray-500 mb-8"
+              className="text-sm lg:text-base text-gray-500 dark:text-gray-400 mb-8"
             >
               اسأل أي سؤال عن الأحوال الشخصية أو المعاملات المدنية أو الإثبات أو المرافعات
             </motion.p>
@@ -436,7 +436,7 @@ export default function ChatInterface({ conversationId }: Props) {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, delay: 0.2 + i * 0.05 }}
                   onClick={() => sendMessage(item.q)}
-                  className="text-right p-4 rounded-2xl bg-white/60 backdrop-blur-sm border border-gray-200/50 text-sm text-gray-700 hover:bg-white hover:shadow-elevated hover:border-primary-200/50 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-start gap-3"
+                  className="text-right p-4 rounded-2xl bg-white/60 dark:bg-surface-800/60 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 text-sm text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-surface-800 hover:shadow-elevated hover:border-primary-200/50 dark:hover:border-primary-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 flex items-start gap-3"
                 >
                   <span className="text-lg mt-0.5 opacity-60">{item.icon}</span>
                   <span>{item.q}</span>
@@ -475,13 +475,13 @@ export default function ChatInterface({ conversationId }: Props) {
                   transition={{ duration: 0.3 }}
                   className="flex items-center gap-3 p-4"
                 >
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100/80 shadow-sm">
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/80 dark:bg-surface-800/80 backdrop-blur-sm border border-gray-100/80 dark:border-white/10 shadow-sm">
                     <div className="flex gap-1">
                       <span className="w-2 h-2 rounded-full bg-primary-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 rounded-full bg-primary-500 animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-2 h-2 rounded-full bg-primary-600 animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span className="text-sm text-gray-500 mr-1">سند يفكر...</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 mr-1">سند يفكر...</span>
                   </div>
                 </motion.div>
               )}
@@ -499,7 +499,7 @@ export default function ChatInterface({ conversationId }: Props) {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
               onClick={scrollToBottomForced}
-              className="sticky bottom-4 mx-auto flex w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-gray-200/50 shadow-elevated items-center justify-center text-gray-500 hover:text-primary-600 hover:shadow-glow transition-all duration-300"
+              className="sticky bottom-4 mx-auto flex w-10 h-10 rounded-full bg-white/90 dark:bg-surface-800/90 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 shadow-elevated items-center justify-center text-gray-500 dark:text-gray-400 hover:text-primary-600 hover:shadow-glow transition-all duration-300"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -523,7 +523,7 @@ export default function ChatInterface({ conversationId }: Props) {
           >
             <button
               onClick={stopGenerating}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200/50 text-sm text-gray-600 hover:bg-white hover:shadow-elevated hover:border-gray-300/50 transition-all duration-300"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 dark:bg-surface-800/80 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 text-sm text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-surface-800 hover:shadow-elevated hover:border-gray-300/50 transition-all duration-300"
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -535,7 +535,7 @@ export default function ChatInterface({ conversationId }: Props) {
       </AnimatePresence>
 
       {/* Floating input */}
-      <div className="p-3 sm:p-4 pb-4 sm:pb-6 bg-gradient-to-t from-surface-50 via-surface-50 to-transparent">
+      <div className="p-3 sm:p-4 pb-4 sm:pb-6 bg-gradient-to-t from-surface-50 via-surface-50 to-transparent dark:from-surface-900 dark:via-surface-900">
         <div className="max-w-3xl mx-auto">
           <form
             onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
@@ -549,7 +549,7 @@ export default function ChatInterface({ conversationId }: Props) {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
               }}
               placeholder={loading ? 'سند يعمل على إجابتك...' : 'اكتب سؤالك القانوني هنا...'}
-              className="flex-1 px-3 py-2.5 bg-transparent border-0 text-sm focus:outline-none focus:ring-0 resize-none min-h-[40px] max-h-[120px]"
+              className="flex-1 px-3 py-2.5 bg-transparent border-0 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-0 resize-none min-h-[40px] max-h-[120px]"
               rows={1}
               disabled={loading}
             />
@@ -563,7 +563,7 @@ export default function ChatInterface({ conversationId }: Props) {
               </svg>
             </button>
           </form>
-          <p className="text-center text-[10px] text-gray-400 mt-2">
+          <p className="text-center text-[10px] text-gray-400 dark:text-gray-500 mt-2">
             سند يقدم استشارات أولية — يُنصح بمراجعة محامٍ مرخص للقرارات المهمة
           </p>
         </div>

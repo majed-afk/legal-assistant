@@ -3,7 +3,10 @@ Supabase client for database operations (feedback, analytics, subscriptions).
 Uses service role key for server-side operations, anon key as fallback.
 """
 from __future__ import annotations
+import logging
 from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY
+
+log = logging.getLogger("sanad.db")
 
 _client = None
 
@@ -23,7 +26,7 @@ def get_supabase():
         _client = create_client(SUPABASE_URL, key)
         return _client
     except Exception as e:
-        print(f"Warning: Could not create Supabase client: {e}")
+        log.warning("Could not create Supabase client: %s", e)
         return None
 
 

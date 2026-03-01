@@ -4,10 +4,13 @@ Handles plan lookups, usage tracking, and limit checking.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from backend.db import get_supabase
+
+log = logging.getLogger("sanad.subscription")
 
 
 # ---- Default free plan limits (fallback if DB unavailable) ----
@@ -58,7 +61,7 @@ async def get_user_subscription(user_id: str) -> dict:
                 "cancel_at_period_end": row["cancel_at_period_end"],
             }
     except Exception as e:
-        print(f"Error fetching subscription: {e}")
+        log.error("Error fetching subscription: %s", e)
 
     return _free_plan_response()
 
@@ -79,7 +82,7 @@ async def get_all_plans() -> list[dict]:
         )
         return result.data or []
     except Exception as e:
-        print(f"Error fetching plans: {e}")
+        log.error("Error fetching plans: %s", e)
         return []
 
 
@@ -101,7 +104,7 @@ async def get_usage_today(user_id: str) -> dict:
         if result.data and len(result.data) > 0:
             return result.data[0]
     except Exception as e:
-        print(f"Error fetching daily usage: {e}")
+        log.error("Error fetching daily usage: %s", e)
 
     return {"questions_count": 0, "drafts_count": 0, "deadlines_count": 0}
 
@@ -117,7 +120,7 @@ async def get_usage_monthly(user_id: str) -> dict:
         if result.data and len(result.data) > 0:
             return result.data[0]
     except Exception as e:
-        print(f"Error fetching monthly usage: {e}")
+        log.error("Error fetching monthly usage: %s", e)
 
     return {"questions": 0, "drafts": 0, "deadlines": 0}
 
@@ -206,7 +209,7 @@ async def increment_usage(user_id: str, action_type: str) -> int:
         }).execute()
         return result.data if result.data else 0
     except Exception as e:
-        print(f"Error incrementing usage: {e}")
+        log.error("Error incrementing usage: %s", e)
         return 0
 
 

@@ -7,12 +7,15 @@ Moyasar API docs: https://moyasar.com/docs/api/
 from __future__ import annotations
 
 import base64
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
 from backend.config import MOYASAR_SECRET_KEY, MOYASAR_CALLBACK_URL
+
+log = logging.getLogger("sanad.payment")
 from backend.db import get_supabase
 
 
@@ -110,7 +113,7 @@ async def create_payment(
         )
 
     if response.status_code not in (200, 201):
-        print(f"Moyasar create payment error: {response.text}")
+        log.error("Moyasar create payment error: %s", response.text)
         raise ValueError("فشل إنشاء عملية الدفع — حاول مرة أخرى")
 
     payment_data = response.json()
@@ -219,7 +222,7 @@ async def verify_payment(payment_id: str, tx_id: Optional[str] = None) -> dict:
         )
 
     if response.status_code != 200:
-        print(f"Moyasar verify error: {response.text}")
+        log.error("Moyasar verify error: %s", response.text)
         raise ValueError("فشل التحقق من عملية الدفع")
 
     payment = response.json()
@@ -351,7 +354,7 @@ async def _activate_subscription(
         .execute()
     )
     if not plan_result.data:
-        print(f"Plan not found: {plan_tier}")
+        log.warning("Plan not found: %s", plan_tier)
         return
 
     plan_id = plan_result.data["id"]
@@ -392,4 +395,4 @@ async def _activate_subscription(
             "subscription_id": sub_id,
         }).eq("id", tx_id).execute()
 
-    print(f"✅ Subscription activated: user={user_id}, plan={plan_tier}, cycle={billing_cycle}")
+    log.info("Subscription activated: user=%s, plan=%s, cycle=%s", user_id, plan_tier, billing_cycle)

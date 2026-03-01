@@ -2,14 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700;800&display=swap');
-
 @layer base {
   :root {
     --foreground: #1e1b4b;
     --background: #f8fafc;
     --font-heading: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
     --font-body: 'Tajawal', 'Noto Naskh Arabic', sans-serif;
+  }
+
+  .dark {
+    --foreground: #e2e8f0;
+    --background: #0f172a;
   }
 
   body {
@@ -30,6 +33,10 @@
     @apply bg-white/70 backdrop-blur-xl border border-white/30 shadow-glass rounded-2xl;
   }
 
+  .dark .glass-card {
+    @apply bg-surface-800/70 border-white/10;
+  }
+
   .glass-card-dark {
     background: rgba(15, 23, 42, 0.92);
     backdrop-filter: blur(20px);
@@ -47,6 +54,10 @@
 
   .input-glass {
     @apply bg-white/80 backdrop-blur-lg border border-gray-200/50 shadow-elevated rounded-2xl;
+  }
+
+  .dark .input-glass {
+    @apply bg-surface-800/80 border-white/10;
   }
 
   .sidebar-active {
@@ -71,6 +82,8 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.45); }
+.dark ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.15); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.3); }
 
 /* Loading dots */
 .loading-dot {
@@ -100,4 +113,16 @@
 @media print {
   body { background: white; font-family: 'Noto Naskh Arabic', serif; font-size: 14pt; line-height: 2; color: black; }
   .no-print { display: none !important; }
+}
+
+/* Focus indicators for accessibility */
+:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible, a:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
 }

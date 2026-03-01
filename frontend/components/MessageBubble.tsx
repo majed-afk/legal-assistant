@@ -120,8 +120,8 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
           isUser
             ? 'bg-gradient-to-l from-primary-500 to-primary-600 text-white max-w-[90%] sm:max-w-[80%] shadow-md'
             : message.isError
-              ? 'bg-red-50/80 backdrop-blur-sm border border-red-200/80 shadow-sm border-r-[3px] border-r-red-400'
-              : 'bg-white/80 backdrop-blur-sm border border-gray-100/80 shadow-sm hover:shadow-elevated border-r-[3px] border-r-primary-400'
+              ? 'bg-red-50/80 dark:bg-red-900/20 backdrop-blur-sm border border-red-200/80 dark:border-red-800/50 shadow-sm border-r-[3px] border-r-red-400'
+              : 'bg-white/80 dark:bg-surface-800/80 backdrop-blur-sm border border-gray-100/80 dark:border-white/10 shadow-sm hover:shadow-elevated border-r-[3px] border-r-primary-400'
         }`}
       >
         {isUser ? (
@@ -133,7 +133,7 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
               <div className="absolute top-2.5 left-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 no-print">
                 <button
                   onClick={handleCopy}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-all"
                   title="نسخ"
                 >
                   {copied ? (
@@ -151,14 +151,14 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
                 </button>
                 <button
                   onClick={handlePrint}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-all"
                   title="طباعة"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                   </svg>
                 </button>
-                <span className="w-px h-4 bg-gray-200 mx-0.5" />
+                <span className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-0.5" />
                 <button
                   onClick={() => handleFeedback('positive')}
                   className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-all ${
@@ -190,21 +190,21 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
               </div>
             )}
 
-            <div className={`prose prose-sm max-w-none leading-relaxed font-legal ${message.isError ? 'text-red-700' : 'text-gray-800'}`}>
+            <div className={`prose prose-sm max-w-none leading-relaxed font-legal ${message.isError ? 'text-red-700 dark:text-red-400' : 'text-gray-800 dark:text-gray-200'}`}>
               <ReactMarkdown
                 components={{
                   h2: ({ children }) => (
-                    <h2 className="text-lg font-bold gradient-text mt-5 mb-2 border-b border-primary-100 pb-1.5 font-heading">
+                    <h2 className="text-lg font-bold gradient-text mt-5 mb-2 border-b border-primary-100 dark:border-primary-800/50 pb-1.5 font-heading">
                       {children}
                     </h2>
                   ),
                   h3: ({ children }) => (
-                    <h3 className="text-base font-bold text-primary-700 mt-4 mb-2 border-b border-gray-100 pb-1 font-heading">
+                    <h3 className="text-base font-bold text-primary-700 dark:text-primary-400 mt-4 mb-2 border-b border-gray-100 dark:border-gray-700/50 pb-1 font-heading">
                       {children}
                     </h3>
                   ),
                   strong: ({ children }) => (
-                    <strong className="font-semibold text-gray-900">{children}</strong>
+                    <strong className="font-semibold text-gray-900 dark:text-gray-100">{children}</strong>
                   ),
                   ul: ({ children }) => (
                     <ul className="list-disc list-inside space-y-1.5 my-2">{children}</ul>
@@ -216,7 +216,7 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
                     <p className="my-2 leading-loose">{children}</p>
                   ),
                   blockquote: ({ children }) => (
-                    <blockquote className="border-r-4 border-gold-500 pr-4 my-3 text-gray-700 bg-gold-300/10 py-2.5 px-1 rounded-l-lg">
+                    <blockquote className="border-r-4 border-gold-500 pr-4 my-3 text-gray-700 dark:text-gray-300 bg-gold-300/10 dark:bg-gold-500/5 py-2.5 px-1 rounded-l-lg">
                       {children}
                     </blockquote>
                   ),
@@ -227,15 +227,15 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
 
                     if (isInline) {
                       return (
-                        <code className="px-1.5 py-0.5 bg-primary-50 text-primary-700 rounded text-xs font-mono" {...props}>
+                        <code className="px-1.5 py-0.5 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded text-xs font-mono" {...props}>
                           {children}
                         </code>
                       );
                     }
 
                     return (
-                      <div className="relative group/code my-3 rounded-xl overflow-hidden border border-gray-200/50">
-                        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-200/50">
+                      <div className="relative group/code my-3 rounded-xl overflow-hidden border border-gray-200/50 dark:border-gray-700/50">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 dark:bg-surface-900/50 border-b border-gray-200/50 dark:border-gray-700/50">
                           <span className="text-[10px] text-gray-400 font-mono">{match?.[1] || 'code'}</span>
                           <button
                             onClick={() => handleCopyCode(codeString)}
@@ -244,8 +244,8 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
                             {codeCopied === codeString ? 'تم النسخ' : 'نسخ'}
                           </button>
                         </div>
-                        <pre className="p-3 overflow-x-auto bg-gray-50/50 text-xs leading-relaxed" dir="ltr">
-                          <code className="font-mono text-gray-800" {...props}>
+                        <pre className="p-3 overflow-x-auto bg-gray-50/50 dark:bg-surface-900/30 text-xs leading-relaxed" dir="ltr">
+                          <code className="font-mono text-gray-800 dark:text-gray-200" {...props}>
                             {children}
                           </code>
                         </pre>
@@ -253,27 +253,27 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
                     );
                   },
                   table: ({ children }) => (
-                    <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/50">
+                    <div className="my-3 overflow-x-auto rounded-xl border border-gray-200/50 dark:border-gray-700/50">
                       <table className="w-full text-sm border-collapse">
                         {children}
                       </table>
                     </div>
                   ),
                   thead: ({ children }) => (
-                    <thead className="bg-primary-50/50">{children}</thead>
+                    <thead className="bg-primary-50/50 dark:bg-primary-900/20">{children}</thead>
                   ),
                   th: ({ children }) => (
-                    <th className="px-3 py-2 text-right font-semibold text-primary-700 border-b border-gray-200/50 text-xs">
+                    <th className="px-3 py-2 text-right font-semibold text-primary-700 dark:text-primary-400 border-b border-gray-200/50 dark:border-gray-700/50 text-xs">
                       {children}
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="px-3 py-2 text-right border-b border-gray-100/50 text-xs text-gray-700">
+                    <td className="px-3 py-2 text-right border-b border-gray-100/50 dark:border-gray-700/30 text-xs text-gray-700 dark:text-gray-300">
                       {children}
                     </td>
                   ),
                   tr: ({ children }) => (
-                    <tr className="hover:bg-gray-50/50 transition-colors">{children}</tr>
+                    <tr className="hover:bg-gray-50/50 dark:hover:bg-surface-800/50 transition-colors">{children}</tr>
                   ),
                 }}
               >
@@ -286,10 +286,10 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
 
             {/* Error retry button */}
             {message.isError && onRetry && (
-              <div className="mt-3 pt-3 border-t border-red-100/80">
+              <div className="mt-3 pt-3 border-t border-red-100/80 dark:border-red-800/30">
                 <button
                   onClick={onRetry}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-100/50 rounded-lg transition-all"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-100/50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -301,10 +301,10 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
 
             {/* Regenerate button */}
             {onRegenerate && !message.isError && (
-              <div className="mt-3 pt-3 border-t border-gray-100/80">
+              <div className="mt-3 pt-3 border-t border-gray-100/80 dark:border-gray-700/50">
                 <button
                   onClick={onRegenerate}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all"
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -318,8 +318,8 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
 
         {/* Sources */}
         {message.sources && message.sources.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-100/80">
-            <p className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1.5">
+          <div className="mt-3 pt-3 border-t border-gray-100/80 dark:border-gray-700/50">
+            <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2 flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
@@ -329,7 +329,7 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
               {message.sources.map((src: any, i: number) => (
                 <span
                   key={i}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-50/80 text-primary-700 rounded-lg text-xs border border-primary-100/50"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary-50/80 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-lg text-xs border border-primary-100/50 dark:border-primary-800/30"
                 >
                   <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -344,10 +344,10 @@ export default function MessageBubble({ message, conversationId, isLastAssistant
         {/* Classification badge */}
         {message.classification && (
           <div className="mt-2.5 flex gap-2">
-            <span className="inline-flex items-center px-2.5 py-0.5 bg-primary-50 text-primary-700 rounded-full text-xs border border-primary-100/50">
+            <span className="inline-flex items-center px-2.5 py-0.5 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 rounded-full text-xs border border-primary-100/50 dark:border-primary-800/30">
               {message.classification.category}
             </span>
-            <span className="inline-flex items-center px-2.5 py-0.5 bg-gray-50 text-gray-500 rounded-full text-xs border border-gray-100">
+            <span className="inline-flex items-center px-2.5 py-0.5 bg-gray-50 dark:bg-surface-900/50 text-gray-500 dark:text-gray-400 rounded-full text-xs border border-gray-100 dark:border-gray-700/50">
               {message.classification.intent}
             </span>
           </div>

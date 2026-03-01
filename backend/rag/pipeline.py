@@ -4,9 +4,12 @@ Hybrid search: combines semantic (vector) search with keyword-based topic filter
 This compensates for the multilingual model's weaker Arabic legal term understanding.
 """
 from __future__ import annotations
+import logging
 from backend.rag.embeddings import embed_query_list
 from backend.rag.vector_store import search
 from backend.rag.classifier import classify_query
+
+log = logging.getLogger("sanad.pipeline")
 
 # Cache for RAG results (question -> context).
 _rag_cache: dict[str, dict] = {}
@@ -471,7 +474,7 @@ def _enrich_followup(question: str, chat_history: list | None) -> str:
     # Build enriched query: original question + topic context (max 3 topics)
     topic_str = " ".join(all_topics[:3])
     enriched = f"{question} ({topic_str})"
-    print(f"🔗 Enriched follow-up: '{question}' → '{enriched}'")
+    log.debug("Enriched follow-up: '%s' → '%s'", question, enriched)
     return enriched
 
 

@@ -19,7 +19,7 @@ export default function ModelSelector({ value, onChange, disabled }: Props) {
   const { isModelModeAllowed, subscription } = useSubscription();
 
   return (
-    <div className="flex items-center bg-gray-100/80 rounded-xl p-1 gap-0.5">
+    <div className="flex items-center bg-gray-100/80 dark:bg-surface-900/80 rounded-xl p-1 gap-0.5">
       {MODELS.map((m) => {
         const allowed = isModelModeAllowed(m.id);
         const isLocked = !allowed;
@@ -34,17 +34,17 @@ export default function ModelSelector({ value, onChange, disabled }: Props) {
               className={clsx(
                 'relative flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium transition-all duration-300 whitespace-nowrap',
                 value === m.id
-                  ? 'text-primary-700'
+                  ? 'text-primary-700 dark:text-primary-300'
                   : isLocked
-                  ? 'text-gray-300 cursor-not-allowed'
-                  : 'text-gray-400 hover:text-gray-600',
+                  ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300',
                 (disabled || isLocked) && 'opacity-50 cursor-not-allowed'
               )}
             >
               {value === m.id && (
                 <motion.div
                   layoutId="model-pill"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                  className="absolute inset-0 bg-white dark:bg-surface-800 rounded-lg shadow-sm"
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 />
               )}

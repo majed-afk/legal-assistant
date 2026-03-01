@@ -10,6 +10,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from backend.logging_config import setup_logging, get_logger
+
+setup_logging()
+log = get_logger("sanad")
 
 # Track whether vector DB is ready (for health check)
 _db_ready = False
@@ -19,36 +23,34 @@ _db_ready = False
 async def lifespan(app: FastAPI):
     """Initialize ChromaDB at startup — DB is pre-built during Docker build."""
     global _db_ready
-    print("⏳ جاري تهيئة ChromaDB...")
+    log.info("Initializing ChromaDB...")
     from backend.rag.vector_store import get_collection, get_collection_count
     col = get_collection()
     count = col.count()
 
     if count > 0:
         _db_ready = True
-        print(f"✅ ChromaDB جاهز — {count} مادة مفهرسة")
+        log.info("ChromaDB ready — %d articles indexed", count)
     else:
-        # DB not built (shouldn't happen with pre-computed embeddings in Docker)
-        # Try building from pre-computed embeddings as fallback
-        print("⚠️ قاعدة البيانات فارغة — محاولة البناء من التضمينات المحسوبة مسبقاً...")
+        log.warning("ChromaDB empty — attempting build from pre-computed embeddings")
         try:
             from backend.tools.setup_db import setup_database
             setup_database()
             count = get_collection_count()
             if count > 0:
                 _db_ready = True
-                print(f"✅ تم بناء قاعدة البيانات — {count} مادة مفهرسة")
+                log.info("Database built — %d articles indexed", count)
         except Exception as e:
-            print(f"⚠️ فشل بناء قاعدة البيانات: {e}")
+            log.error("Failed to build database: %s", e)
 
     # Initialize QA cache and article lookup (zero-cost tiers)
     from backend.rag.qa_cache import initialize_qa_cache
     from backend.rag.article_lookup import initialize_article_lookup
-    print("⏳ جاري تهيئة ذاكرة الأسئلة المتكررة...")
+    log.info("Initializing QA cache...")
     initialize_qa_cache()
     initialize_article_lookup()
 
-    print("🚀 السيرفر جاهز لاستقبال الطلبات")
+    log.info("Server ready to accept requests")
     yield
 
 
@@ -171,7 +173,7 @@ async def ask_question(req: QuestionRequest, request: Request):
         # Tier 1: QA cache match
         qa_match = match_qa_cache(req.question)
         if qa_match:
-            print(f"⚡ QA cache hit (similarity={qa_match['similarity']}, id={qa_match['qa_id']})")
+            log.info("QA cache hit (similarity=%.3f, id=%s)", qa_match["similarity"], qa_match["qa_id"])
             if user_id:
                 await increment_usage(user_id, "questions")
             return {
@@ -191,7 +193,7 @@ async def ask_question(req: QuestionRequest, request: Request):
         # Tier 2: Direct article lookup
         article_match = lookup_article(req.question)
         if article_match:
-            print(f"⚡ Article lookup hit (المادة {article_match['article_number']} — {article_match['law']})")
+            log.info("Article lookup hit (article %s — %s)", article_match["article_number"], article_match["law"])
             if user_id:
                 await increment_usage(user_id, "questions")
             return {
@@ -213,7 +215,7 @@ async def ask_question(req: QuestionRequest, request: Request):
         from backend.rag.qa_cache import get_cached_response
         cached = get_cached_response(req.question, req.model_mode or "1.1")
         if cached:
-            print(f"⚡ Response cache hit")
+            log.info("Response cache hit")
             if user_id:
                 await increment_usage(user_id, "questions")
             return {
@@ -235,7 +237,7 @@ async def ask_question(req: QuestionRequest, request: Request):
         and pre_class["intent"] == "معلومة"
         and len(pre_class.get("all_categories", [])) <= 1):
         effective_mode = "1.1"
-        print(f"🔄 Smart routing: 2.1→1.1 (intent=معلومة)")
+        log.info("Smart routing: 2.1→1.1 (intent=معلومة)")
 
     # Reduce RAG context for simple questions
     top_k = 3 if pre_class["intent"] == "معلومة" else 5
@@ -252,8 +254,7 @@ async def ask_question(req: QuestionRequest, request: Request):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception("Claude API error")
         raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ Claude API: {str(e)}")
 
     # Cache response for future reuse (only first questions, not follow-ups)
@@ -263,7 +264,7 @@ async def ask_question(req: QuestionRequest, request: Request):
             req.question, effective_mode, answer,
             rag_result["classification"], rag_result["sources"],
         )
-        print(f"💾 Response cached: {req.question[:50]}...")
+        log.info("Response cached: %s...", req.question[:50])
 
     # Increment usage after success
     if user_id:
@@ -313,7 +314,7 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         # Tier 1: QA cache match
         qa_match = match_qa_cache(req.question)
         if qa_match:
-            print(f"⚡ QA cache hit (similarity={qa_match['similarity']}, id={qa_match['qa_id']})")
+            log.info("QA cache hit [stream] (similarity=%.3f, id=%s)", qa_match["similarity"], qa_match["qa_id"])
 
             def cached_event_stream():
                 import time
@@ -353,7 +354,7 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         # Tier 2: Direct article lookup
         article_match = lookup_article(req.question)
         if article_match:
-            print(f"⚡ Article lookup hit (المادة {article_match['article_number']} — {article_match['law']})")
+            log.info("Article lookup hit [stream] (article %s — %s)", article_match["article_number"], article_match["law"])
 
             def article_event_stream():
                 import time
@@ -394,7 +395,7 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         from backend.rag.qa_cache import get_cached_response
         cached = get_cached_response(req.question, req.model_mode or "1.1")
         if cached:
-            print(f"⚡ Response cache hit")
+            log.info("Response cache hit [stream]")
 
             def response_cache_stream():
                 import time
@@ -434,7 +435,7 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         and pre_class["intent"] == "معلومة"
         and len(pre_class.get("all_categories", [])) <= 1):
         effective_mode = "1.1"
-        print(f"🔄 Smart routing: 2.1→1.1 (intent=معلومة)")
+        log.info("Smart routing [stream]: 2.1→1.1 (intent=معلومة)")
 
     # Reduce RAG context for simple questions
     top_k = 3 if pre_class["intent"] == "معلومة" else 5
@@ -480,11 +481,10 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
                     _question, _model_mode, full_response,
                     rag_result["classification"], rag_result["sources"],
                 )
-                print(f"💾 Response cached: {_question[:50]}...")
+                log.info("Response cached [stream]: %s...", _question[:50])
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            log.exception("Streaming error")
             # Show user-friendly Arabic error instead of raw API errors
             error_msg = str(e)
             if "rate_limit" in error_msg.lower() or "429" in error_msg:
@@ -631,8 +631,7 @@ async def draft_document(req: DraftRequest, request: Request):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception("Draft generation error")
         raise HTTPException(status_code=500, detail=f"خطأ في صياغة المذكرة: {str(e)}")
 
     # Increment usage after success
@@ -724,7 +723,7 @@ async def submit_feedback(req: FeedbackRequest):
 
         return {"status": "ok", "message": "تم تسجيل التقييم بنجاح"}
     except Exception as e:
-        print(f"Feedback error: {e}")
+        log.error("Feedback error: %s", e)
         raise HTTPException(status_code=500, detail="حدث خطأ أثناء تسجيل التقييم")
 
 
@@ -744,7 +743,7 @@ async def log_analytics_event(req: AnalyticsEventRequest):
         }).execute()
         return {"status": "ok"}
     except Exception as e:
-        print(f"Analytics event error: {e}")
+        log.warning("Analytics event error: %s", e)
         return {"status": "error"}  # Don't fail the request for analytics
 
 
@@ -789,8 +788,7 @@ async def create_subscription(req: SubscriptionCreateRequest, request: Request):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception("Payment creation error")
         raise HTTPException(status_code=500, detail="حدث خطأ أثناء إنشاء عملية الدفع")
 
 
@@ -805,8 +803,7 @@ async def verify_subscription_payment(payment_id: str, tx_id: Optional[str] = No
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.exception("Payment verification error")
         raise HTTPException(status_code=500, detail="حدث خطأ أثناء التحقق من الدفع")
 
 
@@ -836,7 +833,7 @@ async def subscription_webhook(request: Request):
         result = await handle_webhook(payload)
         return result
     except Exception as e:
-        print(f"Webhook error: {e}")
+        log.error("Webhook error: %s", e)
         return {"status": "error"}
 
 

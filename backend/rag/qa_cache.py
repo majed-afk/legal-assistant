@@ -5,8 +5,11 @@ QA Cache — مطابقة الأسئلة المتكررة من قاعدة الإ
 """
 from __future__ import annotations
 import json
+import logging
 import os
 import re
+
+log = logging.getLogger("sanad.qa_cache")
 
 import numpy as np
 
@@ -38,7 +41,7 @@ def get_cached_response(question: str, model_mode: str) -> dict | None:
     if key in _response_cache:
         # Move to end (most recently used)
         _response_cache.move_to_end(key)
-        print(f"⚡ Response cache hit: {key[:60]}...")
+        log.info("Response cache hit: %s...", key[:60])
         return _response_cache[key]
     return None
 
@@ -69,7 +72,7 @@ def initialize_qa_cache():
 
     qa_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'corrected_qa.json')
     if not os.path.exists(qa_path):
-        print("⚠️ corrected_qa.json غير موجود — تخطي QA cache")
+        log.warning("corrected_qa.json not found — skipping QA cache")
         return
 
     with open(qa_path, 'r', encoding='utf-8') as f:
@@ -102,7 +105,7 @@ def initialize_qa_cache():
     norms[norms == 0] = 1  # avoid division by zero
     _qa_embeddings = _qa_embeddings / norms
 
-    print(f"✅ ذاكرة QA جاهزة — {len(_qa_entries)} إجابة موثقة ({len(questions)} سؤال مفهرس)")
+    log.info("QA cache ready — %d verified answers (%d questions indexed)", len(_qa_entries), len(questions))
 
 
 def _extract_sources(corrected_articles: list[str], category: str) -> list[dict]:
