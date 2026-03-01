@@ -13,11 +13,48 @@ import numpy as np
 from backend.rag.embeddings import embed_texts, embed_query
 
 QA_MATCH_THRESHOLD = float(os.getenv("QA_MATCH_THRESHOLD", "0.91"))
+RESPONSE_CACHE_MAX = int(os.getenv("RESPONSE_CACHE_MAX", "256"))
 
 _qa_entries: list[dict] = []
 _qa_embeddings: np.ndarray | None = None
 _qa_index: list[int] = []  # maps embedding row → qa_entry index
 _articles_by_number: dict[str, list[dict]] = {}  # "15_نظام الأحوال الشخصية" → article
+
+# === Response Cache: stores Claude responses for repeated questions ===
+from collections import OrderedDict
+_response_cache: OrderedDict[str, dict] = OrderedDict()
+
+
+def _cache_key(question: str, model_mode: str) -> str:
+    """Normalize question for cache key."""
+    q = re.sub(r'[إأآا]', 'ا', question.strip())
+    q = re.sub(r'\s+', ' ', q)
+    return f"{model_mode}:{q}"
+
+
+def get_cached_response(question: str, model_mode: str) -> dict | None:
+    """Check if a Claude response is cached for this question."""
+    key = _cache_key(question, model_mode)
+    if key in _response_cache:
+        # Move to end (most recently used)
+        _response_cache.move_to_end(key)
+        print(f"⚡ Response cache hit: {key[:60]}...")
+        return _response_cache[key]
+    return None
+
+
+def cache_response(question: str, model_mode: str, response: str,
+                   classification: dict, sources: list) -> None:
+    """Cache a Claude response for future reuse."""
+    key = _cache_key(question, model_mode)
+    _response_cache[key] = {
+        "answer": response,
+        "classification": {**classification, "source": "response_cache"},
+        "sources": sources,
+    }
+    # Evict oldest if over limit
+    while len(_response_cache) > RESPONSE_CACHE_MAX:
+        _response_cache.popitem(last=False)
 
 
 def _normalize_arabic(text: str) -> str:

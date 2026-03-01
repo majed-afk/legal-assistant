@@ -81,7 +81,7 @@ app.add_middleware(
 class QuestionRequest(BaseModel):
     question: str
     chat_history: Optional[List[Dict]] = None
-    model_mode: Optional[str] = "2.1"  # "1.1" (quick) or "2.1" (detailed)
+    model_mode: Optional[str] = "1.1"  # "1.1" (quick) or "2.1" (detailed)
 
 class DraftRequest(BaseModel):
     draft_type: str
@@ -159,7 +159,7 @@ async def ask_question(req: QuestionRequest, request: Request):
         allowed, msg = await check_limit(user_id, "questions")
         if not allowed:
             raise HTTPException(status_code=429, detail=msg)
-        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "2.1")
+        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "1.1")
         if not mode_ok:
             raise HTTPException(status_code=403, detail=mode_msg)
 
@@ -208,8 +208,38 @@ async def ask_question(req: QuestionRequest, request: Request):
                 "has_deadlines": False,
             }
 
+    # === Tier 2.5: Response cache (cached Claude responses) ===
+    if not req.chat_history:
+        from backend.rag.qa_cache import get_cached_response
+        cached = get_cached_response(req.question, req.model_mode or "1.1")
+        if cached:
+            print(f"⚡ Response cache hit")
+            if user_id:
+                await increment_usage(user_id, "questions")
+            return {
+                "answer": cached["answer"],
+                "classification": cached["classification"],
+                "sources": cached["sources"],
+                "has_deadlines": cached["classification"].get("needs_deadline_check", False),
+            }
+
     # === Tier 3: Claude API (full RAG + LLM) ===
-    rag_result = retrieve_context(req.question, chat_history=req.chat_history)
+    # Pre-classify for smart routing and context optimization
+    from backend.rag.classifier import classify_query
+    pre_class = classify_query(req.question)
+
+    # Smart model routing: simple factual → mode 1.1 (saves ~62% tokens)
+    effective_mode = req.model_mode or "1.1"
+    if (effective_mode == "2.1"
+        and not req.chat_history
+        and pre_class["intent"] == "معلومة"
+        and len(pre_class.get("all_categories", [])) <= 1):
+        effective_mode = "1.1"
+        print(f"🔄 Smart routing: 2.1→1.1 (intent=معلومة)")
+
+    # Reduce RAG context for simple questions
+    top_k = 3 if pre_class["intent"] == "معلومة" else 5
+    rag_result = retrieve_context(req.question, top_k=top_k, chat_history=req.chat_history)
 
     try:
         answer = generate_legal_response(
@@ -217,7 +247,7 @@ async def ask_question(req: QuestionRequest, request: Request):
             context=rag_result["context"],
             classification=rag_result["classification"],
             chat_history=req.chat_history,
-            model_mode=req.model_mode or "2.1",
+            model_mode=effective_mode,
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -225,6 +255,15 @@ async def ask_question(req: QuestionRequest, request: Request):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ Claude API: {str(e)}")
+
+    # Cache response for future reuse (only first questions, not follow-ups)
+    if not req.chat_history:
+        from backend.rag.qa_cache import cache_response
+        cache_response(
+            req.question, effective_mode, answer,
+            rag_result["classification"], rag_result["sources"],
+        )
+        print(f"💾 Response cached: {req.question[:50]}...")
 
     # Increment usage after success
     if user_id:
@@ -260,7 +299,7 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         allowed, msg = await check_limit(user_id, "questions")
         if not allowed:
             raise HTTPException(status_code=429, detail=msg)
-        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "2.1")
+        mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "1.1")
         if not mode_ok:
             raise HTTPException(status_code=403, detail=mode_msg)
         # Increment usage before streaming (can't do it after for StreamingResponse)
@@ -350,8 +389,61 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
             )
 
+    # === Tier 2.5: Response cache (cached Claude responses) ===
+    if not req.chat_history:
+        from backend.rag.qa_cache import get_cached_response
+        cached = get_cached_response(req.question, req.model_mode or "1.1")
+        if cached:
+            print(f"⚡ Response cache hit")
+
+            def response_cache_stream():
+                import time
+                meta = json.dumps({
+                    "type": "meta",
+                    "classification": cached["classification"],
+                    "sources": cached["sources"],
+                    "has_deadlines": cached["classification"].get("needs_deadline_check", False),
+                }, ensure_ascii=False)
+                yield f"data: {meta}\n\n"
+
+                answer = cached["answer"]
+                paragraphs = answer.split("\n\n")
+                for i, para in enumerate(paragraphs):
+                    text = para if i == 0 else f"\n\n{para}"
+                    chunk = json.dumps({"type": "token", "text": text}, ensure_ascii=False)
+                    yield f"data: {chunk}\n\n"
+                    time.sleep(0.02)
+
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+            return StreamingResponse(
+                response_cache_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+            )
+
     # === Tier 3: Claude API (full RAG + LLM) ===
-    rag_result = retrieve_context(req.question, chat_history=req.chat_history)
+    # Pre-classify for smart routing and context optimization
+    from backend.rag.classifier import classify_query
+    pre_class = classify_query(req.question)
+
+    # Smart model routing: simple factual → mode 1.1 (saves ~62% tokens)
+    effective_mode = req.model_mode or "1.1"
+    if (effective_mode == "2.1"
+        and not req.chat_history
+        and pre_class["intent"] == "معلومة"
+        and len(pre_class.get("all_categories", [])) <= 1):
+        effective_mode = "1.1"
+        print(f"🔄 Smart routing: 2.1→1.1 (intent=معلومة)")
+
+    # Reduce RAG context for simple questions
+    top_k = 3 if pre_class["intent"] == "معلومة" else 5
+    rag_result = retrieve_context(req.question, top_k=top_k, chat_history=req.chat_history)
+
+    # Capture request params for use in generator closure
+    _question = req.question
+    _chat_history = req.chat_history
+    _model_mode = effective_mode
 
     def event_stream():
         # Send metadata first (classification + sources)
@@ -364,19 +456,31 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         yield f"data: {meta}\n\n"
 
         # Stream Claude response token by token
+        accumulated_tokens = []
         try:
             for token in stream_legal_response(
-                question=req.question,
+                question=_question,
                 context=rag_result["context"],
                 classification=rag_result["classification"],
-                chat_history=req.chat_history,
-                model_mode=req.model_mode or "2.1",
+                chat_history=_chat_history,
+                model_mode=_model_mode,
             ):
+                accumulated_tokens.append(token)
                 chunk = json.dumps({"type": "token", "text": token}, ensure_ascii=False)
                 yield f"data: {chunk}\n\n"
 
             # Signal completion
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+            # Cache response for future reuse (only first questions)
+            if not _chat_history and accumulated_tokens:
+                from backend.rag.qa_cache import cache_response
+                full_response = "".join(accumulated_tokens)
+                cache_response(
+                    _question, _model_mode, full_response,
+                    rag_result["classification"], rag_result["sources"],
+                )
+                print(f"💾 Response cached: {_question[:50]}...")
 
         except Exception as e:
             import traceback
