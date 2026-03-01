@@ -172,7 +172,7 @@ export default function ChatInterface({ conversationId }: Props) {
         const conv = await createConversation(supabase, q.slice(0, 60), modelMode);
         convId = conv.id;
         setCurrentConvId(convId);
-        router.replace(`/chat/${convId}`, { scroll: false });
+        window.history.replaceState(null, '', `/chat/${convId}`);
         notifySidebar();
       } catch (err) {
         console.error('Failed to create conversation:', err);
