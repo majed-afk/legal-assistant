@@ -41,6 +41,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ فشل بناء قاعدة البيانات: {e}")
 
+    # Initialize QA cache and article lookup (zero-cost tiers)
+    from backend.rag.qa_cache import initialize_qa_cache
+    from backend.rag.article_lookup import initialize_article_lookup
+    print("⏳ جاري تهيئة ذاكرة الأسئلة المتكررة...")
+    initialize_qa_cache()
+    initialize_article_lookup()
+
     print("🚀 السيرفر جاهز لاستقبال الطلبات")
     yield
 
@@ -156,6 +163,52 @@ async def ask_question(req: QuestionRequest, request: Request):
         if not mode_ok:
             raise HTTPException(status_code=403, detail=mode_msg)
 
+    # === Tier 1 & 2: Zero-cost layers (skip for follow-up questions) ===
+    if not req.chat_history:
+        from backend.rag.qa_cache import match_qa_cache
+        from backend.rag.article_lookup import lookup_article
+
+        # Tier 1: QA cache match
+        qa_match = match_qa_cache(req.question)
+        if qa_match:
+            print(f"⚡ QA cache hit (similarity={qa_match['similarity']}, id={qa_match['qa_id']})")
+            if user_id:
+                await increment_usage(user_id, "questions")
+            return {
+                "answer": qa_match["corrected_answer"],
+                "classification": {
+                    "category": qa_match["category"],
+                    "intent": "استشارة",
+                    "urgency": "عادي",
+                    "needs_deadline_check": False,
+                    "all_categories": [qa_match["category"]],
+                    "source": "qa_cache",
+                },
+                "sources": qa_match["sources"],
+                "has_deadlines": False,
+            }
+
+        # Tier 2: Direct article lookup
+        article_match = lookup_article(req.question)
+        if article_match:
+            print(f"⚡ Article lookup hit (المادة {article_match['article_number']} — {article_match['law']})")
+            if user_id:
+                await increment_usage(user_id, "questions")
+            return {
+                "answer": article_match["response"],
+                "classification": {
+                    "category": article_match["category"],
+                    "intent": "معلومة",
+                    "urgency": "عادي",
+                    "needs_deadline_check": False,
+                    "all_categories": [article_match["category"]],
+                    "source": "article_lookup",
+                },
+                "sources": article_match["sources"],
+                "has_deadlines": False,
+            }
+
+    # === Tier 3: Claude API (full RAG + LLM) ===
     rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
     try:
@@ -213,6 +266,91 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
         # Increment usage before streaming (can't do it after for StreamingResponse)
         await increment_usage(user_id, "questions")
 
+    # === Tier 1 & 2: Zero-cost layers (skip for follow-up questions) ===
+    if not req.chat_history:
+        from backend.rag.qa_cache import match_qa_cache
+        from backend.rag.article_lookup import lookup_article
+
+        # Tier 1: QA cache match
+        qa_match = match_qa_cache(req.question)
+        if qa_match:
+            print(f"⚡ QA cache hit (similarity={qa_match['similarity']}, id={qa_match['qa_id']})")
+
+            def cached_event_stream():
+                import time
+                classification = {
+                    "category": qa_match["category"],
+                    "intent": "استشارة",
+                    "urgency": "عادي",
+                    "needs_deadline_check": False,
+                    "all_categories": [qa_match["category"]],
+                    "source": "qa_cache",
+                }
+                meta = json.dumps({
+                    "type": "meta",
+                    "classification": classification,
+                    "sources": qa_match["sources"],
+                    "has_deadlines": False,
+                }, ensure_ascii=False)
+                yield f"data: {meta}\n\n"
+
+                # Split answer into paragraphs for natural streaming feel
+                answer = qa_match["corrected_answer"]
+                paragraphs = answer.split("\n\n")
+                for i, para in enumerate(paragraphs):
+                    text = para if i == 0 else f"\n\n{para}"
+                    chunk = json.dumps({"type": "token", "text": text}, ensure_ascii=False)
+                    yield f"data: {chunk}\n\n"
+                    time.sleep(0.02)
+
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+            return StreamingResponse(
+                cached_event_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+            )
+
+        # Tier 2: Direct article lookup
+        article_match = lookup_article(req.question)
+        if article_match:
+            print(f"⚡ Article lookup hit (المادة {article_match['article_number']} — {article_match['law']})")
+
+            def article_event_stream():
+                import time
+                classification = {
+                    "category": article_match["category"],
+                    "intent": "معلومة",
+                    "urgency": "عادي",
+                    "needs_deadline_check": False,
+                    "all_categories": [article_match["category"]],
+                    "source": "article_lookup",
+                }
+                meta = json.dumps({
+                    "type": "meta",
+                    "classification": classification,
+                    "sources": article_match["sources"],
+                    "has_deadlines": False,
+                }, ensure_ascii=False)
+                yield f"data: {meta}\n\n"
+
+                answer = article_match["response"]
+                paragraphs = answer.split("\n\n")
+                for i, para in enumerate(paragraphs):
+                    text = para if i == 0 else f"\n\n{para}"
+                    chunk = json.dumps({"type": "token", "text": text}, ensure_ascii=False)
+                    yield f"data: {chunk}\n\n"
+                    time.sleep(0.02)
+
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+            return StreamingResponse(
+                article_event_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+            )
+
+    # === Tier 3: Claude API (full RAG + LLM) ===
     rag_result = retrieve_context(req.question, chat_history=req.chat_history)
 
     def event_stream():
