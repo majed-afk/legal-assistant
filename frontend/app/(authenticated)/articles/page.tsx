@@ -61,7 +61,7 @@ export default function ArticlesPage() {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold gradient-text font-heading">استعراض النظام</h1>
-            <p className="text-gray-500 text-sm">ابحث في مواد الأنظمة الثلاثة</p>
+            <p className="text-gray-500 text-sm">ابحث في مواد الأنظمة الخمسة</p>
           </div>
         </div>
       </motion.div>
