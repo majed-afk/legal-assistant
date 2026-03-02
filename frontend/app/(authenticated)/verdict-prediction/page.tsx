@@ -21,6 +21,10 @@ const CASE_TYPES = [
   { value: 'عمل', label: 'عمل' },
   { value: 'تعويض', label: 'تعويض' },
   { value: 'دين', label: 'دين / مطالبة مالية' },
+  { value: 'منازعة تجارية', label: 'منازعة تجارية' },
+  { value: 'شركات', label: 'شركات' },
+  { value: 'إفلاس', label: 'إفلاس' },
+  { value: 'ملكية فكرية', label: 'ملكية فكرية' },
 ];
 
 export default function VerdictPredictionPage() {
