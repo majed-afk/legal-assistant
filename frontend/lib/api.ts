@@ -328,6 +328,109 @@ export async function capturePayPalOrder(orderId: string) {
 }
 
 
+// --- Verdict Prediction API ---
+
+interface VerdictStreamCallbacks {
+  onMeta: (data: { case_type: string; sources: any[] }) => void;
+  onToken: (text: string) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+export async function predictVerdictStreaming(
+  input: { case_type?: string; case_details: string },
+  callbacks: VerdictStreamCallbacks,
+  abortController?: AbortController
+) {
+  const controller = abortController || new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+
+  try {
+    const formData = new FormData();
+    formData.append('case_details', input.case_details);
+    if (input.case_type) formData.append('case_type', input.case_type);
+
+    // Get auth headers without Content-Type (FormData sets its own boundary)
+    const supabase = (await import('./supabase/client')).createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    } else if (API_KEY) {
+      headers['X-API-Key'] = API_KEY;
+    }
+
+    const res = await fetch(`${API_BASE}/verdict-predict-stream`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('انتهت الجلسة — سجّل دخولك مرة أخرى');
+      if (res.status === 429) throw new Error('تجاوزت الحد المسموح — يرجى الترقية أو الانتظار');
+      const err = await res.json().catch(() => ({ detail: 'خطأ في التوقع' }));
+      throw new Error(err.detail || 'حدث خطأ');
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Streaming غير مدعوم');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+          switch (event.type) {
+            case 'meta':
+              callbacks.onMeta({ case_type: event.case_type, sources: event.sources });
+              break;
+            case 'token':
+              callbacks.onToken(event.text);
+              break;
+            case 'done':
+              callbacks.onDone();
+              break;
+            case 'error':
+              callbacks.onError(event.message);
+              break;
+          }
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      callbacks.onError('انتهت المهلة — جرب مرة أخرى');
+    } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      callbacks.onError('لا يوجد اتصال بالإنترنت');
+    } else {
+      callbacks.onError(e.message || 'حدث خطأ في الاتصال');
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return controller;
+}
+
+
 // --- Contract Analysis API ---
 
 interface ContractStreamCallbacks {

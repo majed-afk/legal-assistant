@@ -20,6 +20,7 @@ FREE_LIMITS = {
     "drafts_per_month": 1,
     "deadlines_per_month": 3,
     "contract_analyses_per_month": 3,
+    "verdict_predictions_per_month": 2,
     "conversations": 5,
 }
 
@@ -34,6 +35,7 @@ ACTION_MAP = {
     "drafts": {"field": "drafts_count", "daily_key": None, "monthly_key": "drafts_per_month"},
     "deadlines": {"field": "deadlines_count", "daily_key": None, "monthly_key": "deadlines_per_month"},
     "contract_analyses": {"field": "contract_analyses_count", "daily_key": None, "monthly_key": "contract_analyses_per_month"},
+    "verdict_predictions": {"field": "verdict_predictions_count", "daily_key": None, "monthly_key": "verdict_predictions_per_month"},
 }
 
 
@@ -260,5 +262,6 @@ def _action_label(action_type: str) -> str:
         "drafts": "مذكرة",
         "deadlines": "حساب مهلة",
         "contract_analyses": "تحليل عقد",
+        "verdict_predictions": "توقع حكم",
     }
     return labels.get(action_type, action_type)

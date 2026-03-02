@@ -676,6 +676,113 @@ async def analyze_contract_stream(request: Request):
     )
 
 
+# ══════════════════════════════════════════════════════════════
+# Verdict Prediction Endpoint
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/api/verdict-predict-stream")
+async def predict_verdict_stream(request: Request):
+    """
+    Predict verdict for a legal case based on Saudi law articles.
+    Accepts form data: case_type (optional) + case_details (required).
+    Returns SSE stream with same protocol as /api/ask-stream.
+    """
+    from backend.rag.pipeline import retrieve_context
+    from backend.services.verdict_predictor import (
+        detect_case_type,
+        stream_verdict_prediction,
+        CASE_RAG_QUERIES,
+    )
+    from backend.services.subscription import check_limit, increment_usage
+
+    if not _db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة",
+        )
+
+    # 1. Auth check
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول لاستخدام توقع الحكم")
+
+    # 2. Check usage limit (free users get 2/month)
+    allowed, msg = await check_limit(user_id, "verdict_predictions")
+    if not allowed:
+        raise HTTPException(status_code=429, detail=msg)
+
+    # 3. Parse form data
+    form = await request.form()
+    case_details = form.get("case_details", "")
+    if isinstance(case_details, bytes):
+        case_details = case_details.decode("utf-8", errors="ignore")
+
+    case_type_input = form.get("case_type", "")
+    if isinstance(case_type_input, bytes):
+        case_type_input = case_type_input.decode("utf-8", errors="ignore")
+
+    if not case_details or not case_details.strip():
+        raise HTTPException(status_code=400, detail="يرجى إدخال تفاصيل القضية")
+
+    # 4. Detect or use provided case type
+    if case_type_input and case_type_input != "عام":
+        case_type = case_type_input
+    else:
+        case_type = detect_case_type(case_details)
+
+    log.info("Verdict prediction: type=%s, text_len=%d, user=%s", case_type, len(case_details), user_id[:8])
+
+    # 5. RAG — retrieve relevant articles
+    rag_query = CASE_RAG_QUERIES.get(case_type, CASE_RAG_QUERIES["عام"])
+    rag_result = retrieve_context(rag_query, top_k=8)
+
+    # 6. Increment usage before streaming
+    await increment_usage(user_id, "verdict_predictions")
+
+    # 7. Stream prediction
+    def event_stream():
+        try:
+            # Meta event
+            meta = json.dumps({
+                "type": "meta",
+                "case_type": case_type,
+                "sources": rag_result.get("sources", []),
+            }, ensure_ascii=False)
+            yield f"data: {meta}\n\n"
+
+            # Token-by-token streaming
+            for token in stream_verdict_prediction(
+                case_text=case_details,
+                context=rag_result["context"],
+                case_type=case_type,
+            ):
+                chunk = json.dumps({"type": "token", "text": token}, ensure_ascii=False)
+                yield f"data: {chunk}\n\n"
+
+            # Done
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            log.exception("Verdict prediction streaming error")
+            error_msg = str(e)
+            if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                user_error = "الخادم مشغول حالياً — يرجى المحاولة بعد لحظات"
+            else:
+                user_error = "حدث خطأ أثناء توقع الحكم — يرجى المحاولة مرة أخرى"
+            error = json.dumps({"type": "error", "message": user_error}, ensure_ascii=False)
+            yield f"data: {error}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/api/articles")
 async def get_all_articles():
     """Get all articles grouped by chapter."""
