@@ -82,6 +82,10 @@ async def create_order(
     else:
         amount_sar = plan["price_monthly_sar"]
 
+    # Convert SAR to USD for PayPal (1 USD = 3.75 SAR)
+    SAR_TO_USD = 3.75
+    amount_usd = round(float(amount_sar) / SAR_TO_USD, 2)
+
     # Record payment transaction as initiated
     tx_result = (
         sb.table("payment_transactions")
@@ -119,8 +123,8 @@ async def create_order(
                         "reference_id": tx_id,
                         "description": f"اشتراك سند AI — {plan['name_ar']}",
                         "amount": {
-                            "currency_code": "SAR",
-                            "value": str(amount_sar),
+                            "currency_code": "USD",
+                            "value": str(amount_usd),
                         },
                         "custom_id": f"{user_id}|{plan_tier}|{billing_cycle}|{tx_id}",
                     }
