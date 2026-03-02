@@ -170,7 +170,7 @@ export default function SubscriptionPage() {
       {/* PayPal SDK Script */}
       {PAYPAL_CLIENT_ID && (
         <Script
-          src={`https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=SAR`}
+          src={`https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD`}
           strategy="lazyOnload"
           onReady={() => setPaypalReady(true)}
         />
