@@ -26,3 +26,8 @@ SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 MOYASAR_SECRET_KEY = os.getenv("MOYASAR_SECRET_KEY", "")
 MOYASAR_PUBLISHABLE_KEY = os.getenv("MOYASAR_PUBLISHABLE_KEY", "")
 MOYASAR_CALLBACK_URL = os.getenv("MOYASAR_CALLBACK_URL", "https://sanad.audience.sa/subscription/callback")
+
+# PayPal Payment Gateway
+PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
+PAYPAL_SECRET_KEY = os.getenv("PAYPAL_SECRET_KEY", "")
+PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")  # sandbox or live

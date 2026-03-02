@@ -974,6 +974,55 @@ async def subscription_webhook(request: Request):
         return {"status": "error"}
 
 
+# --- PayPal Payment Endpoints ---
+
+@app.post("/api/subscription/paypal/create-order")
+async def paypal_create_order(req: SubscriptionCreateRequest, request: Request):
+    """Create a PayPal order for subscription payment."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.paypal import create_order
+
+    try:
+        result = await create_order(
+            user_id=user_id,
+            plan_tier=req.plan_tier,
+            billing_cycle=req.billing_cycle,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.exception("PayPal create order error")
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء إنشاء طلب الدفع")
+
+
+@app.post("/api/subscription/paypal/capture-order")
+async def paypal_capture_order(request: Request):
+    """Capture an approved PayPal order and activate subscription."""
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول")
+
+    from backend.services.paypal import capture_order
+
+    try:
+        body = await request.json()
+        order_id = body.get("order_id")
+        if not order_id:
+            raise HTTPException(status_code=400, detail="معرّف الطلب مطلوب")
+
+        result = await capture_order(order_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.exception("PayPal capture error")
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء تأكيد الدفع")
+
+
 @app.get("/api/usage")
 async def get_usage(request: Request):
     """Get current user's usage summary."""

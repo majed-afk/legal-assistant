@@ -297,6 +297,37 @@ export async function getUsage() {
 }
 
 
+// --- PayPal Payment API ---
+
+export async function createPayPalOrder(planTier: string, billingCycle: string = 'monthly') {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/subscription/paypal/create-order`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ plan_tier: planTier, billing_cycle: billingCycle }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'خطأ في إنشاء طلب الدفع' }));
+    throw new Error(err.detail || 'حدث خطأ');
+  }
+  return res.json(); // { order_id, tx_id, amount_sar, plan }
+}
+
+export async function capturePayPalOrder(orderId: string) {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/subscription/paypal/capture-order`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ order_id: orderId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'خطأ في تأكيد الدفع' }));
+    throw new Error(err.detail || 'حدث خطأ');
+  }
+  return res.json(); // { status, message, plan_tier }
+}
+
+
 // --- Contract Analysis API ---
 
 interface ContractStreamCallbacks {
