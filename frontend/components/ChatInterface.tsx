@@ -58,16 +58,16 @@ export default function ChatInterface({ conversationId }: Props) {
   const pendingRetryRef = useRef<{ question: string; skipUserMessage: boolean } | null>(null);
   const router = useRouter();
   const supabase = createClient();
-  const { canPerformAction, refreshUsage, isModelModeAllowed } = useSubscription();
+  const { canPerformAction, refreshUsage, isModelModeAllowed, isModelModeAvailable } = useSubscription();
 
-  // Auto-select best available model mode based on subscription
+  // Auto-select best available model mode based on subscription (plan or trial)
   useEffect(() => {
-    if (isModelModeAllowed('2.1')) {
+    if (isModelModeAvailable('2.1')) {
       setModelMode('2.1');
     } else {
       setModelMode('1.1');
     }
-  }, [isModelModeAllowed]);
+  }, [isModelModeAvailable]);
 
   // Smart scroll — only auto-scroll if user hasn't scrolled up
   const scrollToBottom = useCallback(() => {
@@ -245,6 +245,9 @@ export default function ChatInterface({ conversationId }: Props) {
           setLoading(false);
           setIsThinking(false);
           abortRef.current = null;
+
+          // Refresh usage to update trial counter and limits
+          refreshUsage();
 
           if (savedConvId) {
             addMessage(supabase, savedConvId, 'assistant', streamingContentRef.current, {

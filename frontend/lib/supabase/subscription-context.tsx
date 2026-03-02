@@ -37,6 +37,16 @@ interface UsageMonthly {
   deadlines: number;
 }
 
+interface TrialStatus {
+  used: number;
+  max: number;
+  remaining: number;
+}
+
+interface TrialData {
+  "model_mode_2.1"?: TrialStatus;
+}
+
 interface SubscriptionData {
   subscription_id: string | null;
   plan_tier: string;
@@ -56,6 +66,7 @@ interface UsageData {
   monthly: UsageMonthly;
   limits: UsageLimits;
   features: PlanFeatures;
+  trial?: TrialData | null;
 }
 
 interface SubscriptionContextType {
@@ -67,8 +78,12 @@ interface SubscriptionContextType {
   refreshUsage: () => Promise<void>;
   /** Quick check: can user perform this action? */
   canPerformAction: (action: 'questions' | 'drafts' | 'deadlines') => boolean;
-  /** Quick check: is model mode allowed? */
+  /** Quick check: is model mode in the user's plan? */
   isModelModeAllowed: (mode: string) => boolean;
+  /** Is model mode available (via plan OR trial)? */
+  isModelModeAvailable: (mode: string) => boolean;
+  /** Get trial status for model mode 2.1 */
+  getModelModeTrial: () => TrialStatus | null;
   /** Get remaining count for an action (-1 = unlimited) */
   getRemainingCount: (action: 'questions' | 'drafts' | 'deadlines') => number;
 }
@@ -82,6 +97,8 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   refreshUsage: async () => {},
   canPerformAction: () => true,
   isModelModeAllowed: () => true,
+  isModelModeAvailable: () => true,
+  getModelModeTrial: () => null,
   getRemainingCount: () => -1,
 });
 
@@ -174,6 +191,24 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return features.model_modes.includes(mode);
   }, [subscription, usage]);
 
+  const getModelModeTrial = useCallback((): TrialStatus | null => {
+    if (!usage?.trial?.["model_mode_2.1"]) return null;
+    return usage.trial["model_mode_2.1"];
+  }, [usage]);
+
+  const isModelModeAvailable = useCallback((mode: string): boolean => {
+    // First check plan features (paid users)
+    if (isModelModeAllowed(mode)) return true;
+
+    // Then check trial availability for mode 2.1
+    if (mode === '2.1') {
+      const trial = getModelModeTrial();
+      if (trial && trial.remaining > 0) return true;
+    }
+
+    return false;
+  }, [isModelModeAllowed, getModelModeTrial]);
+
   const getRemainingCount = useCallback((action: 'questions' | 'drafts' | 'deadlines'): number => {
     if (!usage) return -1;
 
@@ -209,6 +244,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         refreshUsage,
         canPerformAction,
         isModelModeAllowed,
+        isModelModeAvailable,
+        getModelModeTrial,
         getRemainingCount,
       }}
     >

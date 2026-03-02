@@ -157,13 +157,29 @@ async def ask_question(req: QuestionRequest, request: Request):
     # Check subscription limits
     user_id = _get_user_id(request)
     if user_id:
-        from backend.services.subscription import check_limit, check_model_mode, increment_usage
+        from backend.services.subscription import (
+            check_limit, check_model_mode, increment_usage,
+            get_user_subscription, increment_trial, FREE_FEATURES,
+        )
         allowed, msg = await check_limit(user_id, "questions")
         if not allowed:
             raise HTTPException(status_code=429, detail=msg)
         mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "1.1")
         if not mode_ok:
             raise HTTPException(status_code=403, detail=mode_msg)
+
+        # If free user is using mode 2.1, atomically consume a trial
+        effective_model = req.model_mode or "1.1"
+        if effective_model == "2.1":
+            sub = await get_user_subscription(user_id)
+            features = sub.get("features", FREE_FEATURES)
+            if "2.1" not in features.get("model_modes", []):
+                trial_result = await increment_trial(user_id, "model_mode_2.1")
+                if not trial_result["allowed"]:
+                    raise HTTPException(status_code=403, detail=(
+                        "استنفدت التجارب المجانية الثلاث للوضع المفصّل (سند 2.1). "
+                        "ترقَّ للباقة الأساسية أو أعلى لاستخدام غير محدود."
+                    ))
 
     # === Tier 1 & 2: Zero-cost layers (skip for follow-up questions) ===
     if not req.chat_history:
@@ -296,13 +312,30 @@ async def ask_question_stream(req: QuestionRequest, request: Request):
     # Check subscription limits before streaming
     user_id = _get_user_id(request)
     if user_id:
-        from backend.services.subscription import check_limit, check_model_mode, increment_usage
+        from backend.services.subscription import (
+            check_limit, check_model_mode, increment_usage,
+            get_user_subscription, increment_trial, FREE_FEATURES,
+        )
         allowed, msg = await check_limit(user_id, "questions")
         if not allowed:
             raise HTTPException(status_code=429, detail=msg)
         mode_ok, mode_msg = await check_model_mode(user_id, req.model_mode or "1.1")
         if not mode_ok:
             raise HTTPException(status_code=403, detail=mode_msg)
+
+        # If free user is using mode 2.1, atomically consume a trial
+        effective_model = req.model_mode or "1.1"
+        if effective_model == "2.1":
+            sub = await get_user_subscription(user_id)
+            features = sub.get("features", FREE_FEATURES)
+            if "2.1" not in features.get("model_modes", []):
+                trial_result = await increment_trial(user_id, "model_mode_2.1")
+                if not trial_result["allowed"]:
+                    raise HTTPException(status_code=403, detail=(
+                        "استنفدت التجارب المجانية الثلاث للوضع المفصّل (سند 2.1). "
+                        "ترقَّ للباقة الأساسية أو أعلى لاستخدام غير محدود."
+                    ))
+
         # Increment usage before streaming (can't do it after for StreamingResponse)
         await increment_usage(user_id, "questions")
 

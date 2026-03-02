@@ -29,6 +29,14 @@ FREE_FEATURES = {
     "pdf_export": False,
 }
 
+# Trial configuration for free users
+TRIAL_CONFIG = {
+    "model_mode_2.1": {
+        "max_allowed": 3,
+        "label_ar": "تجربة الوضع المفصّل",
+    },
+}
+
 # Map action types to usage field names and limit keys
 ACTION_MAP = {
     "questions": {"field": "questions_count", "daily_key": "questions_per_day", "monthly_key": "questions_per_month"},
@@ -178,19 +186,92 @@ async def check_limit(user_id: str, action_type: str) -> Tuple[bool, Optional[st
 
 
 async def check_model_mode(user_id: str, model_mode: str) -> Tuple[bool, Optional[str]]:
-    """Check if user's plan allows the requested model mode."""
+    """
+    Check if user's plan allows the requested model mode.
+    Free users get trial access to mode 2.1 (3 lifetime uses).
+    """
     sub = await get_user_subscription(user_id)
     features = sub.get("features", FREE_FEATURES)
     allowed_modes = features.get("model_modes", ["1.1"])
 
-    if model_mode not in allowed_modes:
-        plan_name = sub.get("plan_name_ar", "مجاني")
-        return False, (
-            f"وضع الإجابة {model_mode} غير متاح في باقة {plan_name}. "
-            f"ترقَّ للباقة الأساسية أو أعلى لاستخدام الوضع المفصّل."
-        )
+    # Paid user — mode in plan, allow directly
+    if model_mode in allowed_modes:
+        return True, None
 
-    return True, None
+    # Mode not in plan — check trial eligibility for 2.1
+    if model_mode == "2.1":
+        trial = await get_trial_status(user_id, "model_mode_2.1")
+        if trial["remaining"] > 0:
+            return True, None  # Trial still available
+        else:
+            return False, (
+                "استنفدت التجارب المجانية الثلاث للوضع المفصّل (سند 2.1). "
+                "ترقَّ للباقة الأساسية أو أعلى لاستخدام غير محدود."
+            )
+
+    plan_name = sub.get("plan_name_ar", "مجاني")
+    return False, (
+        f"وضع الإجابة {model_mode} غير متاح في باقة {plan_name}. "
+        f"ترقَّ للباقة الأساسية أو أعلى لاستخدام الوضع المفصّل."
+    )
+
+
+async def get_trial_status(user_id: str, feature: str = "model_mode_2.1") -> dict:
+    """
+    Get trial usage status for a feature.
+    Returns {"used": int, "max": int, "remaining": int}.
+    """
+    config = TRIAL_CONFIG.get(feature, {"max_allowed": 3})
+    sb = get_supabase()
+    if not sb:
+        return {"used": 0, "max": config["max_allowed"], "remaining": config["max_allowed"]}
+
+    try:
+        result = sb.rpc("get_trial_usage", {
+            "p_user_id": user_id,
+            "p_feature": feature,
+        }).execute()
+        if result.data and len(result.data) > 0:
+            row = result.data[0]
+            used = row["current_count"]
+            max_count = row["max_count"]
+            return {"used": used, "max": max_count, "remaining": max(0, max_count - used)}
+    except Exception as e:
+        log.error("Error fetching trial status: %s", e)
+
+    return {"used": 0, "max": config["max_allowed"], "remaining": config["max_allowed"]}
+
+
+async def increment_trial(user_id: str, feature: str = "model_mode_2.1") -> dict:
+    """
+    Atomically consume one trial use. Returns {"allowed": bool, "used": int, "max": int, "remaining": int}.
+    """
+    config = TRIAL_CONFIG.get(feature, {"max_allowed": 3})
+    sb = get_supabase()
+    if not sb:
+        return {"allowed": False, "used": 0, "max": config["max_allowed"], "remaining": 0}
+
+    try:
+        result = sb.rpc("increment_trial_usage", {
+            "p_user_id": user_id,
+            "p_feature": feature,
+            "p_max_allowed": config["max_allowed"],
+        }).execute()
+        if result.data and len(result.data) > 0:
+            row = result.data[0]
+            used = row["current_count"]
+            max_count = row["max_count"]
+            allowed = row["allowed"]
+            return {
+                "allowed": allowed,
+                "used": used,
+                "max": max_count,
+                "remaining": max(0, max_count - used),
+            }
+    except Exception as e:
+        log.error("Error incrementing trial: %s", e)
+
+    return {"allowed": False, "used": 0, "max": config["max_allowed"], "remaining": 0}
 
 
 async def increment_usage(user_id: str, action_type: str) -> int:
@@ -224,9 +305,15 @@ async def get_user_usage_summary(user_id: str) -> dict:
     monthly = await get_usage_monthly(user_id)
     limits = sub.get("limits", FREE_LIMITS)
 
+    # Include trial data for free users
+    plan_tier = sub.get("plan_tier", "free")
+    trial_data = None
+    if plan_tier == "free":
+        trial_data = await get_trial_status(user_id, "model_mode_2.1")
+
     return {
         "plan": {
-            "tier": sub.get("plan_tier", "free"),
+            "tier": plan_tier,
             "name_ar": sub.get("plan_name_ar", "مجاني"),
             "name_en": sub.get("plan_name_en", "Free"),
         },
@@ -234,6 +321,7 @@ async def get_user_usage_summary(user_id: str) -> dict:
         "monthly": monthly,
         "limits": limits,
         "features": sub.get("features", FREE_FEATURES),
+        "trial": {"model_mode_2.1": trial_data} if trial_data else None,
     }
 
 
