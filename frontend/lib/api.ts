@@ -295,3 +295,107 @@ export async function getUsage() {
   if (!res.ok) throw new Error('خطأ في تحميل الاستخدام');
   return res.json();
 }
+
+
+// --- Contract Analysis API ---
+
+interface ContractStreamCallbacks {
+  onMeta: (data: { contract_type: string; sources: any[] }) => void;
+  onToken: (text: string) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+export async function analyzeContractStreaming(
+  input: { file?: File; text?: string },
+  callbacks: ContractStreamCallbacks,
+  abortController?: AbortController
+) {
+  const controller = abortController || new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000); // 3 min timeout (analysis takes longer)
+
+  try {
+    const formData = new FormData();
+    if (input.file) formData.append('file', input.file);
+    if (input.text) formData.append('contract_text', input.text);
+
+    // Get auth headers but without Content-Type (FormData sets its own boundary)
+    const supabase = (await import('./supabase/client')).createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    } else if (API_KEY) {
+      headers['X-API-Key'] = API_KEY;
+    }
+
+    const res = await fetch(`${API_BASE}/contract-analyze-stream`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('انتهت الجلسة — سجّل دخولك مرة أخرى');
+      if (res.status === 403) throw new Error('تحليل العقود متاح للمشتركين فقط');
+      if (res.status === 429) throw new Error('تجاوزت الحد المسموح — يرجى الترقية أو الانتظار');
+      const err = await res.json().catch(() => ({ detail: 'خطأ في التحليل' }));
+      throw new Error(err.detail || 'حدث خطأ');
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Streaming غير مدعوم');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const event = JSON.parse(jsonStr);
+          switch (event.type) {
+            case 'meta':
+              callbacks.onMeta({ contract_type: event.contract_type, sources: event.sources });
+              break;
+            case 'token':
+              callbacks.onToken(event.text);
+              break;
+            case 'done':
+              callbacks.onDone();
+              break;
+            case 'error':
+              callbacks.onError(event.message);
+              break;
+          }
+        } catch {
+          // Skip malformed JSON
+        }
+      }
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') {
+      callbacks.onError('انتهت المهلة — جرب مرة أخرى');
+    } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      callbacks.onError('لا يوجد اتصال بالإنترنت');
+    } else {
+      callbacks.onError(e.message || 'حدث خطأ في الاتصال');
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return controller;
+}

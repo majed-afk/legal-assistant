@@ -32,6 +32,7 @@ ACTION_MAP = {
     "questions": {"field": "questions_count", "daily_key": "questions_per_day", "monthly_key": "questions_per_month"},
     "drafts": {"field": "drafts_count", "daily_key": None, "monthly_key": "drafts_per_month"},
     "deadlines": {"field": "deadlines_count", "daily_key": None, "monthly_key": "deadlines_per_month"},
+    "contract_analyses": {"field": "contract_analyses_count", "daily_key": None, "monthly_key": "contract_analyses_per_month"},
 }
 
 

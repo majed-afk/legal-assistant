@@ -547,6 +547,143 @@ async def search_articles(req: SearchRequest):
     return {"query": req.query, "results": articles, "total": len(articles)}
 
 
+# ══════════════════════════════════════════════════════════════
+# Contract Analysis Endpoint
+# ══════════════════════════════════════════════════════════════
+
+@app.post("/api/contract-analyze-stream")
+async def analyze_contract_stream(request: Request):
+    """
+    Analyze a legal contract against Saudi law articles.
+    Accepts multipart/form-data with file (PDF/DOCX) or contract_text field.
+    Returns SSE stream with same protocol as /api/ask-stream.
+    """
+    from backend.rag.pipeline import retrieve_context
+    from backend.services.contract_analyzer import (
+        extract_text_from_pdf,
+        extract_text_from_docx,
+        detect_contract_type,
+        stream_contract_analysis,
+        CONTRACT_RAG_QUERIES,
+    )
+    from backend.services.subscription import check_limit, increment_usage, get_user_subscription
+
+    if not _db_ready:
+        raise HTTPException(
+            status_code=503,
+            detail="جاري تجهيز قاعدة البيانات... يرجى المحاولة بعد دقيقة",
+        )
+
+    # 1. Auth check
+    user_id = _get_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="يجب تسجيل الدخول لاستخدام تحليل العقود")
+
+    # 2. Subscription check — paid only
+    sub = await get_user_subscription(user_id)
+    if sub.get("plan_tier") == "free":
+        raise HTTPException(
+            status_code=403,
+            detail="تحليل العقود متاح للمشتركين فقط — ترقَّ لباقة مدفوعة لاستخدام هذه الميزة",
+        )
+
+    # Check monthly limit
+    allowed, msg = await check_limit(user_id, "contract_analyses")
+    if not allowed:
+        raise HTTPException(status_code=429, detail=msg)
+
+    # 3. Parse form data
+    form = await request.form()
+    contract_text = ""
+
+    # Try file upload first
+    file = form.get("file")
+    if file and hasattr(file, "read"):
+        file_bytes = await file.read()
+        filename = getattr(file, "filename", "") or ""
+
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="الملف فارغ")
+
+        # Max 5MB
+        if len(file_bytes) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="حجم الملف يتجاوز 5 ميجا")
+
+        try:
+            if filename.lower().endswith(".pdf"):
+                contract_text = extract_text_from_pdf(file_bytes)
+            elif filename.lower().endswith(".docx"):
+                contract_text = extract_text_from_docx(file_bytes)
+            else:
+                # Try as plain text
+                contract_text = file_bytes.decode("utf-8", errors="ignore")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    # Fallback to text field
+    if not contract_text:
+        contract_text = form.get("contract_text", "")
+        if isinstance(contract_text, bytes):
+            contract_text = contract_text.decode("utf-8", errors="ignore")
+
+    if not contract_text or not contract_text.strip():
+        raise HTTPException(status_code=400, detail="يرجى رفع ملف العقد أو لصق نص العقد")
+
+    # 4. Detect contract type
+    contract_type = detect_contract_type(contract_text)
+    log.info("Contract analysis: type=%s, text_len=%d, user=%s", contract_type, len(contract_text), user_id[:8])
+
+    # 5. RAG — retrieve relevant articles
+    rag_query = CONTRACT_RAG_QUERIES.get(contract_type, CONTRACT_RAG_QUERIES["عام"])
+    rag_result = retrieve_context(rag_query, top_k=8)
+
+    # 6. Increment usage before streaming
+    await increment_usage(user_id, "contract_analyses")
+
+    # 7. Stream analysis
+    def event_stream():
+        try:
+            # Meta event
+            meta = json.dumps({
+                "type": "meta",
+                "contract_type": contract_type,
+                "sources": rag_result.get("sources", []),
+            }, ensure_ascii=False)
+            yield f"data: {meta}\n\n"
+
+            # Token-by-token streaming
+            for token in stream_contract_analysis(
+                contract_text=contract_text,
+                context=rag_result["context"],
+                contract_type=contract_type,
+            ):
+                chunk = json.dumps({"type": "token", "text": token}, ensure_ascii=False)
+                yield f"data: {chunk}\n\n"
+
+            # Done
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            log.exception("Contract analysis streaming error")
+            error_msg = str(e)
+            if "rate_limit" in error_msg.lower() or "429" in error_msg:
+                user_error = "الخادم مشغول حالياً — يرجى المحاولة بعد لحظات"
+            else:
+                user_error = "حدث خطأ أثناء تحليل العقد — يرجى المحاولة مرة أخرى"
+            error = json.dumps({"type": "error", "message": user_error}, ensure_ascii=False)
+            yield f"data: {error}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/api/articles")
 async def get_all_articles():
     """Get all articles grouped by chapter."""
