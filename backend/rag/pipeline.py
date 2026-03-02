@@ -555,7 +555,49 @@ def _enrich_followup(question: str, chat_history: list | None) -> str:
     if not topic_keywords:
         return question
 
-    # Merge: current detected topics + history topics (avoid duplicates)
+    # === Commercial courts context disambiguation ===
+    # When history is about المحاكم التجارية but follow-up uses generic terms
+    # (e.g. "استئناف" alone), we add commercial compound keywords so that
+    # _detect_topics matches "الاستئناف التجاري" instead of "مرافعات - أحكام ختامية".
+    _COMMERCIAL_TOPICS = {
+        "اختصاص المحكمة التجارية", "الاختصاص النوعي", "الاختصاص المكاني",
+        "قيد الدعوى التجارية", "الإخطار قبل الدعوى", "عدم سماع الدعوى",
+        "المرافعة الكتابية", "محضر الجلسة والصلح", "غياب المدعي وشطب الدعوى",
+        "الطلبات المستعجلة التجارية", "صدور الحكم التجاري", "التنفيذ المعجل",
+        "تصحيح الحكم وتفسيره", "أوامر الأداء", "الاستئناف التجاري",
+        "النقض التجاري", "التماس إعادة النظر", "الدعاوى اليسيرة", "الدعاوى الجماعية",
+    }
+    is_commercial = any(t in _COMMERCIAL_TOPICS for t in topic_keywords)
+
+    if is_commercial:
+        # Map generic legal terms → commercial compound keywords
+        _GENERIC_TO_COMMERCIAL = {
+            "استئناف": "استئناف تجاري",
+            "نقض": "نقض تجاري",
+            "حكم": "حكم تجاري",
+            "دعوى": "دعوى تجارية",
+            "مستعجل": "طلب مستعجل تجاري",
+            "تبليغ": "تبليغ تجاري",
+            "اعتراض": "استئناف تجاري",
+            "أداء": "أمر أداء",
+            "صحيفة": "صحيفة الدعوى التجارية",
+        }
+        commercial_additions = []
+        for generic, commercial in _GENERIC_TO_COMMERCIAL.items():
+            if generic in q and "تجاري" not in q and "تجارية" not in q:
+                commercial_additions.append(commercial)
+
+        if commercial_additions:
+            enriched = f"{question} ({' '.join(commercial_additions)})"
+            log.debug("Commercial context enrichment: '%s' → '%s'", question, enriched)
+            return enriched
+        elif not detected:
+            # No specific terms detected but commercial context — add generic marker
+            enriched = f"{question} (محكمة تجارية)"
+            log.debug("Commercial context enrichment (generic): '%s' → '%s'", question, enriched)
+            return enriched
+
+    # Default enrichment: current detected topics + history topics (avoid duplicates)
     all_topics = list(detected or [])
     for t in topic_keywords:
         if t not in all_topics:

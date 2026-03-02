@@ -425,7 +425,7 @@ export default function ChatInterface({ conversationId }: Props) {
               transition={{ duration: 0.5, delay: 0.15 }}
               className="text-sm lg:text-base text-gray-500 dark:text-gray-400 mb-8"
             >
-              اسأل أي سؤال عن الأحوال الشخصية أو المعاملات المدنية أو الإثبات أو المرافعات
+              اسأل أي سؤال عن الأحوال الشخصية أو المعاملات المدنية أو الإثبات أو المرافعات أو المحاكم التجارية
             </motion.p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
