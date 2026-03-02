@@ -579,15 +579,7 @@ async def analyze_contract_stream(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="يجب تسجيل الدخول لاستخدام تحليل العقود")
 
-    # 2. Subscription check — paid only
-    sub = await get_user_subscription(user_id)
-    if sub.get("plan_tier") == "free":
-        raise HTTPException(
-            status_code=403,
-            detail="تحليل العقود متاح للمشتركين فقط — ترقَّ لباقة مدفوعة لاستخدام هذه الميزة",
-        )
-
-    # Check monthly limit
+    # 2. Check usage limit (free users get 3/month, paid plans have their own limits)
     allowed, msg = await check_limit(user_id, "contract_analyses")
     if not allowed:
         raise HTTPException(status_code=429, detail=msg)

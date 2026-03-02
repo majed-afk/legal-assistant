@@ -19,6 +19,7 @@ FREE_LIMITS = {
     "questions_per_month": 30,
     "drafts_per_month": 1,
     "deadlines_per_month": 3,
+    "contract_analyses_per_month": 3,
     "conversations": 5,
 }
 
@@ -258,5 +259,6 @@ def _action_label(action_type: str) -> str:
         "questions": "سؤال",
         "drafts": "مذكرة",
         "deadlines": "حساب مهلة",
+        "contract_analyses": "تحليل عقد",
     }
     return labels.get(action_type, action_type)

@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
-import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import { analyzeContractStreaming } from '@/lib/api';
 import { useSubscription } from '@/lib/supabase/subscription-context';
@@ -21,8 +20,6 @@ export default function ContractAnalysisPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analysisRef = useRef('');
   const abortRef = useRef<AbortController | null>(null);
-
-  const isPaid = subscription && subscription.plan_tier !== 'free';
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -104,38 +101,6 @@ export default function ContractAnalysisPage() {
     return (
       <div className="p-8 flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  // Paywall for free users
-  if (!isPaid) {
-    return (
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-8 text-center"
-        >
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center shadow-md mx-auto mb-5">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold gradient-text font-heading mb-3">تحليل العقود</h2>
-          <p className="text-gray-500 mb-6 max-w-md mx-auto">
-            ميزة تحليل العقود متاحة للمشتركين فقط. حلّل عقودك مقابل الأنظمة السعودية واكتشف المخالفات والمخاطر والتوصيات.
-          </p>
-          <Link
-            href="/subscription"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-l from-primary-500 to-primary-600 text-white rounded-xl font-medium hover:shadow-glow transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-            </svg>
-            ترقية الاشتراك
-          </Link>
-        </motion.div>
       </div>
     );
   }
