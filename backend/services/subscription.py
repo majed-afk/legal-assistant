@@ -5,12 +5,18 @@ Handles plan lookups, usage tracking, and limit checking.
 from __future__ import annotations
 
 import logging
+import time as _time
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from backend.db import get_supabase
 
 log = logging.getLogger("sanad.subscription")
+
+# Simple TTL cache for subscription data (avoid N+1 queries)
+_sub_cache: dict[str, tuple[float, dict]] = {}
+_SUB_CACHE_TTL = 300  # 5 minutes
+_SUB_CACHE_MAX = 100  # Max cached users
 
 
 # ---- Default free plan limits (fallback if DB unavailable) ----
@@ -76,6 +82,30 @@ async def get_user_subscription(user_id: str) -> dict:
         log.error("Error fetching subscription: %s", e)
 
     return _free_plan_response()
+
+
+async def get_user_subscription_cached(user_id: str) -> dict:
+    """Get subscription with 5-minute TTL cache."""
+    now = _time.time()
+    if user_id in _sub_cache:
+        ts, data = _sub_cache[user_id]
+        if now - ts < _SUB_CACHE_TTL:
+            return data
+
+    data = await get_user_subscription(user_id)
+
+    # Evict oldest if cache is full
+    if len(_sub_cache) >= _SUB_CACHE_MAX:
+        oldest_key = min(_sub_cache, key=lambda k: _sub_cache[k][0])
+        del _sub_cache[oldest_key]
+
+    _sub_cache[user_id] = (now, data)
+    return data
+
+
+def invalidate_subscription_cache(user_id: str):
+    """Invalidate cached subscription data (call after plan changes)."""
+    _sub_cache.pop(user_id, None)
 
 
 async def get_all_plans() -> list[dict]:
@@ -147,7 +177,7 @@ async def check_limit(user_id: str, action_type: str) -> Tuple[bool, Optional[st
         return True, None  # Unknown action — allow
 
     mapping = ACTION_MAP[action_type]
-    sub = await get_user_subscription(user_id)
+    sub = await get_user_subscription_cached(user_id)
     limits = sub.get("limits", FREE_LIMITS)
 
     # Check daily limit (only for questions)
@@ -190,7 +220,7 @@ async def check_model_mode(user_id: str, model_mode: str) -> Tuple[bool, Optiona
     Check if user's plan allows the requested model mode.
     Free users get trial access to mode 2.1 (3 lifetime uses).
     """
-    sub = await get_user_subscription(user_id)
+    sub = await get_user_subscription_cached(user_id)
     features = sub.get("features", FREE_FEATURES)
     allowed_modes = features.get("model_modes", ["1.1"])
 

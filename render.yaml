@@ -5,12 +5,22 @@ services:
     dockerfilePath: ./backend/Dockerfile
     region: oregon
     plan: free
+    numInstances: 1
+    healthCheckPath: /api/health
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: ENVIRONMENT
+        value: "production"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
         sync: false
       - key: RATE_LIMIT_PER_MINUTE
         value: "10"

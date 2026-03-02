@@ -15,6 +15,18 @@ from backend.logging_config import setup_logging, get_logger
 setup_logging()
 log = get_logger("sanad")
 
+# Sentry error tracking (optional — only active if SENTRY_DSN is set)
+import sentry_sdk
+_sentry_dsn = os.getenv("SENTRY_DSN", "")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.1,
+        environment=os.getenv("ENVIRONMENT", "production"),
+    )
+    log.info("Sentry initialized for error tracking")
+
 # Track whether vector DB is ready (for health check)
 _db_ready = False
 
@@ -66,8 +78,9 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 # Security middleware
 # Order matters: last added = outermost (processes request first)
 # CORS must be outermost so it adds headers even on 401/403 responses from JWT middleware
-from backend.middleware import JWTAuthMiddleware
+from backend.middleware import JWTAuthMiddleware, RequestIDMiddleware
 app.add_middleware(JWTAuthMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -630,9 +643,9 @@ async def analyze_contract_stream(request: Request):
         if not file_bytes:
             raise HTTPException(status_code=400, detail="الملف فارغ")
 
-        # Max 5MB
-        if len(file_bytes) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="حجم الملف يتجاوز 5 ميجا")
+        # Max 10MB
+        if len(file_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="حجم الملف يتجاوز 10 ميجابايت")
 
         try:
             if filename.lower().endswith(".pdf"):
@@ -1165,3 +1178,61 @@ async def get_usage(request: Request):
     from backend.services.subscription import get_user_usage_summary
     summary = await get_user_usage_summary(user_id)
     return summary
+
+
+# ── Admin endpoints ──────────────────────────────────────────
+
+@app.get("/api/admin/stats")
+async def admin_stats(request: Request):
+    """Get admin dashboard statistics."""
+    from backend.services.admin import check_admin, get_admin_stats
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(403, "يجب تسجيل الدخول")
+    if not await check_admin(user_id):
+        raise HTTPException(403, "ليس لديك صلاحيات الأدمن")
+    return await get_admin_stats()
+
+
+@app.get("/api/admin/users")
+async def admin_users(request: Request, limit: int = 50, offset: int = 0):
+    """Get paginated user list (admin only)."""
+    from backend.services.admin import check_admin, get_admin_users
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(403, "يجب تسجيل الدخول")
+    if not await check_admin(user_id):
+        raise HTTPException(403, "ليس لديك صلاحيات الأدمن")
+    return await get_admin_users(limit=limit, offset=offset)
+
+
+@app.post("/api/admin/users/{target_user_id}/plan")
+async def admin_change_plan(target_user_id: str, request: Request):
+    """Change a user's subscription plan (admin only)."""
+    from backend.services.admin import check_admin, update_user_subscription_admin
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(403, "يجب تسجيل الدخول")
+    if not await check_admin(user_id):
+        raise HTTPException(403, "ليس لديك صلاحيات الأدمن")
+
+    body = await request.json()
+    plan_tier = body.get("plan_tier")
+    if not plan_tier:
+        raise HTTPException(400, "يجب تحديد الباقة المطلوبة")
+
+    result = await update_user_subscription_admin(user_id, target_user_id, plan_tier)
+    if not result.get("success"):
+        raise HTTPException(400, result.get("error", "حدث خطأ"))
+    return result
+
+
+@app.get("/api/admin/role")
+async def admin_get_my_role(request: Request):
+    """Get current user's role."""
+    from backend.services.admin import get_user_role
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(403, "يجب تسجيل الدخول")
+    role = await get_user_role(user_id)
+    return {"role": role}

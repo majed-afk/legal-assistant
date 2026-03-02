@@ -4,6 +4,7 @@ Includes retry logic for rate limits and streaming support.
 Supports two model modes: 1.1 (quick) and 2.1 (detailed).
 """
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import time
@@ -31,6 +32,31 @@ def _call_claude_with_retry(client, max_retries=3, **kwargs):
                 wait = 2 ** attempt * 5
                 log.warning("API overloaded, waiting %ds... (attempt %d/%d)", wait, attempt + 1, max_retries)
                 time.sleep(wait)
+            else:
+                raise
+
+
+async def _call_claude_with_retry_async(client, max_retries=3, **kwargs):
+    """Call Claude API with exponential backoff on rate limits (async version).
+
+    Uses asyncio.sleep instead of time.sleep to avoid blocking the event loop,
+    and runs the synchronous API call in a thread pool.
+    """
+    for attempt in range(max_retries):
+        try:
+            return await asyncio.to_thread(client.messages.create, **kwargs)
+        except anthropic.RateLimitError as e:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt * 5  # 5s, 10s, 20s
+                log.warning("Rate limit hit, waiting %ds... (attempt %d/%d)", wait, attempt + 1, max_retries)
+                await asyncio.sleep(wait)
+            else:
+                raise
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < max_retries - 1:
+                wait = 2 ** attempt * 5
+                log.warning("API overloaded, waiting %ds... (attempt %d/%d)", wait, attempt + 1, max_retries)
+                await asyncio.sleep(wait)
             else:
                 raise
 
@@ -275,13 +301,16 @@ def stream_legal_response(
             return  # Success, exit retry loop
         except anthropic.RateLimitError:
             if attempt < max_retries - 1:
-                wait = 2 ** attempt * 5
+                wait = min(2 ** attempt * 2, 5)  # 2s, 4s, 5s (reduced from 5/10/20)
+                # TODO: Convert stream_legal_response to async generator to use asyncio.sleep
+                # Using blocking sleep here since this is a sync generator; kept short to minimize impact
                 time.sleep(wait)
             else:
                 raise
         except anthropic.APIStatusError as e:
             if e.status_code == 529 and attempt < max_retries - 1:
-                wait = 2 ** attempt * 5
+                wait = min(2 ** attempt * 2, 5)  # 2s, 4s, 5s (reduced)
+                # TODO: Convert stream_legal_response to async generator to use asyncio.sleep
                 time.sleep(wait)
             else:
                 raise

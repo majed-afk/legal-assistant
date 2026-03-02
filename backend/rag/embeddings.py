@@ -26,7 +26,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return [emb.tolist() for emb in embeddings]
 
 
-@lru_cache(maxsize=128)
+@lru_cache(maxsize=512)
 def embed_query(query: str) -> tuple:
     """Embed a single query. Cached for repeated/similar questions."""
     model = _get_model()

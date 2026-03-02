@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/supabase/auth-context';
 import { createClient } from '@/lib/supabase/client';
 import { getConversations, deleteConversation, updateConversationTitle } from '@/lib/supabase/conversations';
+import { getAdminRole } from '@/lib/api';
 import { useTheme } from '@/lib/theme-context';
 import SubscriptionBadge from '@/components/SubscriptionBadge';
 import UsageBar from '@/components/UsageBar';
@@ -57,6 +58,7 @@ export default function Sidebar() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [isAdmin, setIsAdmin] = useState(false);
   const supabase = createClient();
 
   const loadConversations = useCallback(async () => {
@@ -68,6 +70,20 @@ export default function Sidebar() {
   }, [user]);
 
   useEffect(() => { loadConversations(); }, [loadConversations]);
+
+  // Check admin role silently
+  useEffect(() => {
+    if (!user) return;
+    getAdminRole()
+      .then((data) => {
+        if (data.role === 'admin' || data.role === 'super_admin') {
+          setIsAdmin(true);
+        }
+      })
+      .catch(() => {
+        // Not admin — ignore
+      });
+  }, [user]);
 
   useEffect(() => {
     const handleConvChanged = () => loadConversations();
@@ -225,6 +241,27 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
+
+      {/* Admin link - only visible for admins */}
+      {isAdmin && (
+        <nav className="px-3 py-2 border-t border-white/5" aria-label="إدارة">
+          <Link
+            href="/admin"
+            className={clsx(
+              'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200',
+              pathname === '/admin'
+                ? 'sidebar-active'
+                : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
+            )}
+            aria-current={pathname === '/admin' ? 'page' : undefined}
+          >
+            <svg className="w-4 h-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            لوحة الإدارة
+          </Link>
+        </nav>
+      )}
 
       <UsageBar compact />
 

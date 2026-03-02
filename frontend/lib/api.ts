@@ -533,3 +533,41 @@ export async function analyzeContractStreaming(
 
   return controller;
 }
+
+
+// --- Admin APIs ---
+
+export async function getAdminRole(): Promise<{ role: string }> {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/admin/role`, { headers });
+  if (!res.ok) throw new Error('خطأ في التحقق من الصلاحيات');
+  return res.json();
+}
+
+export async function getAdminStats(): Promise<any> {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/admin/stats`, { headers });
+  if (!res.ok) throw new Error('خطأ في تحميل الإحصائيات');
+  return res.json();
+}
+
+export async function getAdminUsers(limit = 50, offset = 0): Promise<any[]> {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/admin/users?limit=${limit}&offset=${offset}`, { headers });
+  if (!res.ok) throw new Error('خطأ في تحميل المستخدمين');
+  return res.json();
+}
+
+export async function adminChangePlan(userId: string, planTier: string): Promise<any> {
+  const headers = await getHeaders();
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/plan`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ plan_tier: planTier }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'خطأ في تغيير الباقة' }));
+    throw new Error(err.detail || 'حدث خطأ');
+  }
+  return res.json();
+}

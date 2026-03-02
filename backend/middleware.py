@@ -1,5 +1,5 @@
 """
-Security middleware: JWT authentication with API key fallback.
+Security middleware: JWT authentication with API key fallback + request ID tracking.
 
 JWT Auth (primary):
   - Validates Supabase JWT from Authorization: Bearer <token>
@@ -10,11 +10,15 @@ API Key Auth (legacy fallback):
   - If X-API-Key matches API_KEY env, allows request with user_id=None
   - This is a temporary backward-compatibility measure
 
+RequestID:
+  - Assigns a unique request ID to each request for log tracing
+
 Usage limits are checked inside endpoint handlers (not here)
 because middleware cannot easily read request bodies with StreamingResponse.
 """
 from __future__ import annotations
 
+import uuid
 import jwt
 from jwt import PyJWKClient
 from fastapi import Request
@@ -22,6 +26,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from backend.config import API_KEY, SUPABASE_JWT_SECRET, SUPABASE_URL
+from backend.logging_config import request_id_var
+
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Assigns a unique request ID to each request for tracing."""
+
+    async def dispatch(self, request: Request, call_next):
+        rid = request.headers.get("x-request-id", str(uuid.uuid4())[:8])
+        request_id_var.set(rid)
+        response = await call_next(request)
+        response.headers["x-request-id"] = rid
+        return response
 
 
 # Paths that require no authentication at all

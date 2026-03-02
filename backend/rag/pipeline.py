@@ -13,7 +13,7 @@ log = logging.getLogger("sanad.pipeline")
 
 # Cache for RAG results (question -> context).
 _rag_cache: dict[str, dict] = {}
-_RAG_CACHE_MAX = 32
+_RAG_CACHE_MAX = 128
 
 # Legal terms → exact ChromaDB topic names for precise filtering.
 # Longest-match-first: put compound terms before single words.
