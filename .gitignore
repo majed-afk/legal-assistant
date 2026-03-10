@@ -27,6 +27,19 @@ backend/chroma_db/
 *.swp
 .DS_Store
 
+# Android signing
+*.keystore
+*.jks
+sanad-keystore-base64.txt
+sanad-key.pem
+sanad-cert.pem
+
+# Android build
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+
 # Claude
 .claude/
 .vercel

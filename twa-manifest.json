@@ -1,0 +1,35 @@
+{
+  "packageId": "ai.sanad.app",
+  "host": "sanad.audience.sa",
+  "name": "سند — مستشارك القانوني الذكي",
+  "launcherName": "سند",
+  "display": "standalone",
+  "themeColor": "#0f172a",
+  "navigationColor": "#0f172a",
+  "navigationColorDark": "#0f172a",
+  "navigationDividerColor": "#0f172a",
+  "navigationDividerColorDark": "#0f172a",
+  "backgroundColor": "#0f172a",
+  "enableNotifications": false,
+  "startUrl": "/chat",
+  "iconUrl": "https://sanad.audience.sa/icons/icon-512x512.png",
+  "maskableIconUrl": "https://sanad.audience.sa/icons/icon-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "sanad-upload.keystore",
+    "alias": "sanad"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://sanad.audience.sa/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "orientation": "portrait"
+}
