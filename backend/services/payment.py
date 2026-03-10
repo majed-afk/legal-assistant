@@ -7,13 +7,15 @@ Moyasar API docs: https://moyasar.com/docs/api/
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
-from backend.config import MOYASAR_SECRET_KEY, MOYASAR_CALLBACK_URL
+from backend.config import MOYASAR_SECRET_KEY, MOYASAR_CALLBACK_URL, MOYASAR_WEBHOOK_SECRET
 
 log = logging.getLogger("sanad.payment")
 from backend.db import get_supabase
@@ -306,11 +308,29 @@ async def cancel_subscription(user_id: str) -> dict:
     }
 
 
-async def handle_webhook(payload: dict) -> dict:
+def verify_webhook_signature(payload_bytes: bytes, signature: str) -> bool:
+    """Verify Moyasar webhook HMAC-SHA256 signature."""
+    if not MOYASAR_WEBHOOK_SECRET:
+        log.warning("MOYASAR_WEBHOOK_SECRET not set — webhook signature verification skipped")
+        return True  # Allow in dev if secret not configured yet
+    expected = hmac.new(
+        MOYASAR_WEBHOOK_SECRET.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+async def handle_webhook(payload: dict, signature: str = "", payload_bytes: bytes = b"") -> dict:
     """
     Process Moyasar webhook callback.
     This is a backup confirmation — verify_payment is the primary flow.
     """
+    # Verify webhook signature
+    if MOYASAR_WEBHOOK_SECRET and not verify_webhook_signature(payload_bytes, signature):
+        log.warning("Webhook signature verification failed")
+        raise ValueError("توقيع غير صالح")
+
     event_type = payload.get("type")
     data = payload.get("data", {})
     payment_id = data.get("id")
@@ -340,7 +360,11 @@ async def _activate_subscription(
     payment_id: str,
     tx_id: Optional[str] = None,
 ) -> None:
-    """Create or update user subscription after successful payment."""
+    """Create or update user subscription after successful payment.
+
+    Uses an RPC function for atomic deactivate+create when available,
+    otherwise falls back to sequential operations with a lock check.
+    """
     sb = get_supabase()
     if not sb:
         return
@@ -365,6 +389,41 @@ async def _activate_subscription(
         period_end = now + timedelta(days=365)
     else:
         period_end = now + timedelta(days=30)
+
+    # Try atomic RPC first (if the DB function exists)
+    try:
+        rpc_result = sb.rpc("activate_subscription_atomic", {
+            "p_user_id": user_id,
+            "p_plan_id": plan_id,
+            "p_billing_cycle": billing_cycle,
+            "p_payment_id": payment_id,
+            "p_period_start": now.isoformat(),
+            "p_period_end": period_end.isoformat(),
+        }).execute()
+        if rpc_result.data:
+            sub_id = rpc_result.data
+            if tx_id and sub_id:
+                sb.table("payment_transactions").update({
+                    "subscription_id": sub_id,
+                }).eq("id", tx_id).execute()
+            log.info("Subscription activated (atomic): user=%s, plan=%s, cycle=%s", user_id, plan_tier, billing_cycle)
+            return
+    except Exception as e:
+        log.info("Atomic RPC not available, using sequential fallback: %s", e)
+
+    # Fallback: sequential operations (deactivate + create)
+    # Check for existing active subscription to prevent duplicates
+    existing = (
+        sb.table("user_subscriptions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("status", "active")
+        .eq("moyasar_payment_id", payment_id)
+        .execute()
+    )
+    if existing.data:
+        log.warning("Duplicate activation attempt: user=%s, payment=%s", user_id, payment_id)
+        return
 
     # Deactivate any existing active subscription
     sb.table("user_subscriptions").update({

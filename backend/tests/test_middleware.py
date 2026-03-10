@@ -226,8 +226,8 @@ class TestAPIKeyAuth:
                 assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_api_key_in_query_param_authenticates(self):
-        """Valid API key as query parameter should also authenticate."""
+    async def test_api_key_in_query_param_rejected(self):
+        """API key in query params should be rejected (security: prevents credential leakage in logs/URLs)."""
         app = _create_test_app()
         transport = ASGITransport(app=app)
 
@@ -237,9 +237,7 @@ class TestAPIKeyAuth:
                     "/api/protected",
                     params={"api_key": "test-secret-key"}
                 )
-                assert resp.status_code == 200
-                body = resp.json()
-                assert body["auth_method"] == "api_key"
+                assert resp.status_code == 401
 
     @pytest.mark.asyncio
     async def test_empty_api_key_config_rejects(self):

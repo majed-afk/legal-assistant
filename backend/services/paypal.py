@@ -195,7 +195,8 @@ async def capture_order(order_id: str) -> dict:
 
     # Extract metadata from custom_id
     purchase_unit = capture_data.get("purchase_units", [{}])[0]
-    custom_id = purchase_unit.get("payments", {}).get("captures", [{}])[0].get("custom_id", "")
+    capture_info = purchase_unit.get("payments", {}).get("captures", [{}])[0]
+    custom_id = capture_info.get("custom_id", "")
 
     if not custom_id:
         # Fallback: try from purchase unit directly
@@ -211,6 +212,28 @@ async def capture_order(order_id: str) -> dict:
     sb = get_supabase()
     if not sb:
         raise ValueError("خدمة قاعدة البيانات غير متوفرة")
+
+    # Verify captured amount matches the expected plan price
+    captured_amount = capture_info.get("amount", {})
+    captured_value = float(captured_amount.get("value", "0"))
+
+    # Look up expected price from transaction record
+    tx_result = sb.table("payment_transactions").select("amount_sar").eq("id", tx_id).single().execute()
+    if tx_result.data:
+        expected_sar = float(tx_result.data["amount_sar"])
+        SAR_TO_USD = 3.75
+        expected_usd = round(expected_sar / SAR_TO_USD, 2)
+        # Allow 1 cent tolerance for rounding
+        if abs(captured_value - expected_usd) > 0.02:
+            log.error(
+                "PayPal amount mismatch: captured=%.2f USD, expected=%.2f USD (%.0f SAR), order=%s",
+                captured_value, expected_usd, expected_sar, order_id,
+            )
+            sb.table("payment_transactions").update({
+                "status": "amount_mismatch",
+                "payment_method": "paypal",
+            }).eq("id", tx_id).execute()
+            raise ValueError("المبلغ المدفوع لا يطابق سعر الباقة")
 
     # Update transaction status
     sb.table("payment_transactions").update({

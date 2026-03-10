@@ -29,6 +29,21 @@ from backend.config import API_KEY, SUPABASE_JWT_SECRET, SUPABASE_URL
 from backend.logging_config import request_id_var
 
 
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Adds security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if request.url.scheme == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Assigns a unique request ID to each request for tracing."""
 
@@ -142,14 +157,14 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
                     status_code=401,
                     content={"detail": "انتهت صلاحية الجلسة — سجّل الدخول مرة أخرى"},
                 )
-            except jwt.InvalidTokenError as e:
+            except jwt.InvalidTokenError:
                 return JSONResponse(
                     status_code=401,
-                    content={"detail": f"رمز مصادقة غير صالح: {str(e)}"},
+                    content={"detail": "رمز مصادقة غير صالح — سجّل الدخول مرة أخرى"},
                 )
 
-        # Fallback: API key authentication (legacy — will be removed later)
-        api_key = request.headers.get("x-api-key") or request.query_params.get("api_key")
+        # Fallback: API key authentication (header only — query params rejected for security)
+        api_key = request.headers.get("x-api-key")
         if api_key and API_KEY and api_key == API_KEY:
             request.state.user_id = None
             request.state.email = None

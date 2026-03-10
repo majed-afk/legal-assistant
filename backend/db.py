@@ -17,7 +17,13 @@ def get_supabase():
     if _client is not None:
         return _client
 
-    key = SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
+    if SUPABASE_SERVICE_KEY:
+        key = SUPABASE_SERVICE_KEY
+    elif SUPABASE_ANON_KEY:
+        key = SUPABASE_ANON_KEY
+        log.warning("Using SUPABASE_ANON_KEY instead of SERVICE_KEY — RLS restrictions apply, server-side operations may fail")
+    else:
+        key = None
     if not SUPABASE_URL or not key:
         return None  # Supabase not configured — features gracefully disabled
 

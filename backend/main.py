@@ -4,11 +4,12 @@ Sanad AI — FastAPI Backend (أحوال شخصية + معاملات مدنية 
 from __future__ import annotations
 import json
 import os
+import uuid as _uuid
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from backend.logging_config import setup_logging, get_logger
 
@@ -78,16 +79,17 @@ ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127
 # Security middleware
 # Order matters: last added = outermost (processes request first)
 # CORS must be outermost so it adds headers even on 401/403 responses from JWT middleware
-from backend.middleware import JWTAuthMiddleware, RequestIDMiddleware
+from backend.middleware import JWTAuthMiddleware, RequestIDMiddleware, SecurityHeadersMiddleware
 app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
 )
 
 
@@ -142,13 +144,10 @@ async def health_check():
     """Health check endpoint."""
     from backend.rag.vector_store import get_collection_count
     count = get_collection_count()
+    status = "healthy" if _db_ready and count > 0 else "degraded"
     return {
-        "status": "healthy",
+        "status": status,
         "service": "Sanad AI",
-        "vector_db_count": count,
-        "db_ready": _db_ready,
-        "db_complete": count >= 1300,
-        "laws": ["أحوال شخصية", "معاملات مدنية", "إثبات", "مرافعات شرعية", "محاكم تجارية", "ضوابط الإثبات إلكترونياً"],
     }
 
 
@@ -281,10 +280,11 @@ async def ask_question(req: QuestionRequest, request: Request):
             model_mode=effective_mode,
         )
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error("Legal response ValueError: %s", e)
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء معالجة طلبك — يرجى المحاولة مرة أخرى")
     except Exception as e:
         log.exception("Claude API error")
-        raise HTTPException(status_code=500, detail=f"خطأ في الاتصال بـ Claude API: {str(e)}")
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء معالجة طلبك — يرجى المحاولة مرة أخرى")
 
     # Cache response for future reuse (only first questions, not follow-ups)
     if not req.chat_history:
@@ -648,13 +648,23 @@ async def analyze_contract_stream(request: Request):
             raise HTTPException(status_code=413, detail="حجم الملف يتجاوز 10 ميجابايت")
 
         try:
+            # Validate file type by magic bytes + extension
             if filename.lower().endswith(".pdf"):
+                if not file_bytes[:5].startswith(b"%PDF"):
+                    raise HTTPException(status_code=400, detail="الملف ليس PDF صالحاً")
                 contract_text = extract_text_from_pdf(file_bytes)
             elif filename.lower().endswith(".docx"):
+                if not file_bytes[:4].startswith(b"PK\x03\x04"):
+                    raise HTTPException(status_code=400, detail="الملف ليس DOCX صالحاً")
                 contract_text = extract_text_from_docx(file_bytes)
             else:
-                # Try as plain text
-                contract_text = file_bytes.decode("utf-8", errors="ignore")
+                # Try as plain text (only allow text-like content)
+                try:
+                    contract_text = file_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    raise HTTPException(status_code=400, detail="نوع الملف غير مدعوم — يرجى رفع PDF أو DOCX أو نص عادي")
+        except HTTPException:
+            raise
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -911,10 +921,11 @@ async def draft_document(req: DraftRequest, request: Request):
     try:
         draft = generate_draft(req.draft_type, req.case_details, rag_result["context"])
     except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error("Draft ValueError: %s", e)
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء صياغة المذكرة — يرجى المحاولة مرة أخرى")
     except Exception as e:
         log.exception("Draft generation error")
-        raise HTTPException(status_code=500, detail=f"خطأ في صياغة المذكرة: {str(e)}")
+        raise HTTPException(status_code=500, detail="حدث خطأ أثناء صياغة المذكرة — يرجى المحاولة مرة أخرى")
 
     # Increment usage after success
     if user_id:
@@ -1111,9 +1122,14 @@ async def subscription_webhook(request: Request):
     from backend.services.payment import handle_webhook
 
     try:
-        payload = await request.json()
-        result = await handle_webhook(payload)
+        payload_bytes = await request.body()
+        payload = json.loads(payload_bytes)
+        signature = request.headers.get("x-moyasar-signature", "")
+        result = await handle_webhook(payload, signature=signature, payload_bytes=payload_bytes)
         return result
+    except ValueError as e:
+        log.warning("Webhook rejected: %s", e)
+        return JSONResponse(status_code=403, content={"status": "rejected", "reason": str(e)})
     except Exception as e:
         log.error("Webhook error: %s", e)
         return {"status": "error"}
@@ -1203,6 +1219,9 @@ async def admin_users(request: Request, limit: int = 50, offset: int = 0):
         raise HTTPException(403, "يجب تسجيل الدخول")
     if not await check_admin(user_id):
         raise HTTPException(403, "ليس لديك صلاحيات الأدمن")
+    # Clamp pagination params
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
     return await get_admin_users(limit=limit, offset=offset)
 
 
@@ -1215,6 +1234,12 @@ async def admin_change_plan(target_user_id: str, request: Request):
         raise HTTPException(403, "يجب تسجيل الدخول")
     if not await check_admin(user_id):
         raise HTTPException(403, "ليس لديك صلاحيات الأدمن")
+
+    # Validate target_user_id is a valid UUID
+    try:
+        _uuid.UUID(target_user_id)
+    except ValueError:
+        raise HTTPException(400, "معرّف المستخدم غير صالح")
 
     body = await request.json()
     plan_tier = body.get("plan_tier")
